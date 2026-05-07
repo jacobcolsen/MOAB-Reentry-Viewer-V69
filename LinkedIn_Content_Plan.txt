@@ -1,0 +1,783 @@
+LINKEDIN CONTENT PLAN
+MOAB Atmospheric Reentry Viewer
+===============================
+
+TARGET AUDIENCE
+Aerospace engineers, astrodynamics professionals, defense/space industry recruiters,
+science enthusiasts, and software engineers interested in physics simulation.
+
+POSTING CADENCE
+2 posts per week — Monday and Thursday — spanning ~7 weeks.
+Adjust based on engagement. Respond to every comment within 2 hours (LinkedIn
+algorithm heavily rewards early engagement).
+
+FORMAT PER POST
+- Hook: 1-2 sentences that create curiosity or tension
+- Body: 3-6 paragraphs or a clean bulleted breakdown
+- Close: a specific question or call to action
+- Hashtags: 3-5 per post
+- Visual: ALWAYS attach an image, GIF, or screen recording
+- Length: 150-300 words
+
+SERIES HASHTAG (use on every post)
+#ReentrySimSeries  or  #AtmosphericReentrySeries
+
+===============================
+POST SCHEDULE
+===============================
+
+POST 1 — Week 1, Monday
+THE HOOK: What Happens at 9 km/s?
+
+PURPOSE
+Launch the series. Generate curiosity. Introduce the application.
+
+KEY POINTS
+- Atmospheric reentry is one of the hardest problems in aerospace engineering
+- A 5,000 kg spacecraft hitting air at orbital velocity creates plasma hotter than the sun's surface
+- This tool simulates it in real time, in a browser
+- Tease the 14-part series ahead
+
+DRAFT HOOK
+"What happens when a 5,000 kg spacecraft hits the atmosphere at 9 km/s?
+The air can't get out of the way fast enough — it compresses, heats up, and tries
+to incinerate everything.
+I built a physics-accurate simulation to find out exactly what happens next."
+
+BODY
+Introduce the tool: browser-based, interactive, physics-accurate atmospheric reentry
+trajectory simulation. Built in vanilla JavaScript, Three.js, and Chart.js — no
+external physics engine. Mention what it models: drag, lift, bank angle control,
+aerodynamic heating, real-time telemetry charts, 3D visualization.
+Tease the series: "Over the next several weeks I'll walk through the physics, the
+engineering, and the code behind this. Follow along — it gets interesting fast."
+
+VISUAL
+Animated screen recording: simulation running, trajectory tracing across charts,
+heat flux spiking, vehicle decelerating to rest.
+
+CTA
+"Follow along for the full series. What do you think is the hardest part of
+designing a reentry vehicle?"
+
+HASHTAGS
+#AerospaceEngineering #AtmosphericReentry #SpaceEngineering #PhysicsSimulation #JavaScript
+
+ACTION AFTER POSTING: Pin this post to your LinkedIn profile.
+
+---
+
+POST 2 — Week 1, Thursday
+THE STATE VECTOR: 6 Numbers That Define a Reentry
+
+PURPOSE
+Introduce the mathematical structure of the simulation. Hook the engineers.
+
+KEY POINTS
+- State vector: [r, θ, φ, V, γ, ψ]
+- Why spherical coordinates (not Cartesian)
+- 3-DOF assumption: we track the vehicle's center of mass, not its rotation
+- Getting one of these 6 numbers wrong can mean the difference between
+  Pacific splashdown and atmospheric burnup
+
+DRAFT HOOK
+"You can describe where a spacecraft is and how fast it's going with just 6 numbers.
+Getting those 6 numbers right is the difference between splashdown in the Pacific
+and burning up in the atmosphere."
+
+BODY BULLETS
+  r   — radial distance from Earth's center [km] (not altitude — the difference matters)
+  θ   — longitude, East positive [radians]
+  φ   — latitude, North positive [radians]
+  V   — velocity magnitude [km/s]
+  γ   — flight path angle [radians] (positive = climbing, negative = diving)
+  ψ   — heading angle [radians] (0 = North, 90° = East)
+
+Explain the 3-DOF assumption: we're tracking where the vehicle goes and how fast,
+not how it's tumbling. Good enough for trajectory-level fidelity.
+
+VISUAL
+Clean graphic of the 6 state variables with definitions and units.
+Or: annotated screenshot of the simulation showing which chart corresponds to which state.
+
+CTA
+"Which of these 6 variables do you think is the most critical to get right?
+Drop your answer below."
+
+HASHTAGS
+#Astrodynamics #TrajectoryDesign #OrbitalMechanics #AerospaceEngineering #STEM
+
+---
+
+POST 3 — Week 2, Monday
+THE EQUATIONS OF MOTION: A System of 6 Coupled ODEs
+
+PURPOSE
+Show the actual governing equations. Demonstrate technical depth.
+This is the post that earns credibility with aerospace professionals.
+
+KEY POINTS
+- 6 coupled, nonlinear ordinary differential equations
+- Why "coupled": changing altitude changes density, which changes drag,
+  which changes velocity, which changes heating — all simultaneously
+- No analytical solution exists — must integrate numerically
+- Bank angle σ is the ONLY control input — appears in only 2 of the 6 equations
+
+DRAFT HOOK
+"Here are the 6 equations that govern every atmospheric reentry ever flown.
+They look simple. They are not."
+
+EQUATIONS (render as clean image — use LaTeX or formatted text screenshot):
+
+  dr/dt  =  V sin(γ)
+  dθ/dt  =  V cos(γ) cos(ψ) / (r cos(φ))
+  dφ/dt  =  V cos(γ) sin(ψ) / r
+  dV/dt  = -a_drag - g sin(γ)
+  dγ/dt  =  (1/V) [a_lift cos(σ) + (V²/r - g) cos(γ)]
+  dψ/dt  =  (1/V) [a_lift sin(σ)/cos(γ) - (V²/r) cos(γ) cos(ψ) tan(φ)]
+
+BODY
+Walk through each equation physically. dr/dt is just "how fast is altitude changing."
+dV/dt is drag slowing you down plus gravity pulling you deeper.
+The interesting ones are dγ/dt and dψ/dt — that's where bank angle σ appears.
+That's your only control lever. Everything else is physics.
+
+VISUAL
+Formatted image of the 6 equations with labels. Consider color-coding the
+bank angle term σ in red to make it stand out as the control input.
+
+CTA
+"Have you worked with these equations before? What context did you encounter them in?"
+
+HASHTAGS
+#DifferentialEquations #FlightMechanics #AerospaceEngineering #Physics #Simulation
+
+---
+
+POST 4 — Week 2, Thursday
+THE ATMOSPHERE: One Equation to Model Everything
+
+PURPOSE
+Explain the atmospheric density model. Show the simplification tradeoff.
+
+KEY POINTS
+- Exponential density model: ρ(h) = ρ_s × exp(-β × (r - r_s))
+  where ρ_s = 1.225 kg/m³, β = 0.14 km⁻¹, r_s = 6378.137 km
+- Why density drops exponentially with altitude
+- Above ~120 km: essentially vacuum — no meaningful drag
+- Below ~50 km: density is high enough that drag is crushing
+- The reentry corridor is the thin band between "skip out of the atmosphere"
+  and "auger in and burn up" — roughly 120 km down to 40 km is where it all happens
+- This model is simpler than US Standard Atmosphere 1976, but accurate enough
+  for trajectory-level fidelity
+
+DRAFT HOOK
+"99% of Earth's atmosphere sits below 32 km.
+Reentry vehicles travel through the other 1% faster than a rifle bullet.
+Here's the single equation that models all of it."
+
+BODY
+Explain scale height intuition: for every 7 km you go up, density drops by roughly
+half. At 120 km, density is about 10⁻⁸ times sea level. That's why spacecraft orbit
+up there without significant drag. But as they dip below 80 km during reentry,
+everything changes fast.
+
+Note the deliberate simplification: a more complex atmosphere model would add
+complexity without meaningfully changing the trajectory at the 3-DOF fidelity level.
+The engineer's job is knowing which simplifications are acceptable.
+
+VISUAL
+Chart of atmospheric density vs. altitude showing the exponential curve.
+Overlay the simulated trajectory's altitude profile to show where the vehicle
+actually experiences meaningful drag.
+
+CTA
+"This simplification is intentional. A more complex model doesn't change the
+trajectory at the precision level this simulation targets.
+Do you agree with that tradeoff — or where would you draw the line?"
+
+HASHTAGS
+#AtmosphericScience #AerospaceEngineering #FluidDynamics #Simulation #EngineeringDesign
+
+---
+
+POST 5 — Week 3, Monday
+THE HARDEST PART: Aerodynamic Heating
+
+PURPOSE
+Explain heat flux. The most dramatic physics in the entire reentry problem.
+This post will resonate with the widest audience — plasma is viscerally interesting.
+
+KEY POINTS
+- Sutton-Graves heat flux equation:
+  Q = 199,830 × (ρ/ρ_sea)^0.5 × (V/V_sea)^3.15 × 1,000  [W/m²]
+- The V^3.15 dependence — velocity matters enormously more than density
+- This is why slowing down first (via skip maneuver) before going deep is so critical
+- Peak heat flux does NOT occur at maximum velocity — it occurs later, when the
+  vehicle is slower but the air is thick enough to matter
+- The plasma sheath around an Apollo capsule reached ~7,000°C — hotter than
+  the sun's photosphere (~5,500°C)
+- Stagnation temperature also modeled: T_stag = T_∞ × [1 + (γ-1)/2 × Mach²]
+
+DRAFT HOOK
+"At 9 km/s, the air in front of your vehicle can't move fast enough to get out
+of the way. It compresses. It heats. The plasma in front of an Apollo capsule
+was hotter than the surface of the sun.
+Here's the equation that predicts how much your heat shield needs to survive."
+
+BODY
+Walk through the physical intuition. Q scales with V^3.15 — which means doubling
+your velocity multiplies heat flux by 8.8x. This is why the first few seconds of
+reentry are so dangerous. As velocity decreases and altitude decreases, you hit a
+crossover point where the density increase starts to win over the velocity decrease.
+That's when heat flux peaks — roughly 40-60 km altitude.
+
+Note: ablative heat shields work by absorbing heat through material phase change
+(charring, melting, sublimating). They literally sacrifice themselves to keep the
+vehicle cool. Pure insulation doesn't work — the heat rates are too high.
+
+VISUAL
+Heat flux vs. time chart from the simulation with the peak heat flux annotation.
+Add an annotation showing the altitude at which peak heat flux occurs.
+
+CTA
+"Notice that peak heat flux doesn't happen at maximum velocity — it happens later
+when density is high enough to matter. Does that surprise you?"
+
+HASHTAGS
+#AerodynamicHeating #HeatShield #SpaceEngineering #AerospaceEngineering #Thermodynamics
+
+---
+
+POST 6 — Week 3, Thursday
+SOLVING IT: The Cash-Karp RK5 Method
+
+PURPOSE
+Explain numerical integration. Show computational rigor and software depth.
+
+KEY POINTS
+- No closed-form solution exists for the 6-DOF reentry equations
+- Must integrate numerically — advance the solution one small time step at a time
+- Euler's method: simple but unstable and inaccurate for stiff ODEs
+- RK4: better — 4 stages per step, widely used
+- Cash-Karp RK5: 6 stages, computes both 4th- and 5th-order solutions per step,
+  uses the difference as an error estimate
+- Time step: 0.1 seconds — ~2,500 steps per trajectory
+- Runs in <1 second in the browser
+
+DRAFT HOOK
+"You can't solve these equations analytically. No closed form exists.
+So I solved them numerically — stepping forward 0.1 seconds at a time,
+25,000 computations per trajectory.
+Here's the algorithm that makes it work."
+
+CASH-KARP INTUITION
+At each time step:
+  1. Evaluate the derivatives at 6 different points (k1 through k6)
+  2. Combine them in two different weighted averages:
+     - A 4th-order estimate (less accurate)
+     - A 5th-order estimate (more accurate)
+  3. Use the 5th-order result to advance the solution
+  4. The difference between 4th and 5th order estimates = local truncation error
+     — a built-in accuracy sensor
+
+This gives you accuracy AND an error estimate, without needing to run the
+simulation twice.
+
+VISUAL
+Code snippet showing the Cash-Karp coefficient arrays, or a diagram of the
+6-stage RK5 structure showing how k1-k6 are combined.
+
+CTA
+"Numerical integration shows up everywhere in engineering — not just aerospace.
+Where have you had to reach for it?"
+
+HASHTAGS
+#NumericalMethods #RungeKutta #ComputationalPhysics #AerospaceEngineering #ScientificComputing
+
+---
+
+POST 7 — Week 4, Monday
+APOLLO 10: Real Mission Data in the Simulation
+
+PURPOSE
+Connect the simulation to real history. Human interest + technical validation.
+This is the post most likely to go viral — history + engineering is a powerful combination.
+
+KEY POINTS
+- Apollo 10 reentry: May 26, 1969, Pacific Ocean
+- Crew: Tom Stafford, John Young, Gene Cernan
+- Apollo 10 was the full dress rehearsal for Apollo 11 — they flew to within
+  15 km of the lunar surface but did not land (that was four weeks later)
+- Their reentry data is embedded in the simulation:
+    Mass: 5,498.2 kg
+    Entry velocity: 11.067 km/s
+    Flight path angle: -6.62°
+    Drag coefficient: 1.2569
+    L/D ratio: 0.3246
+    Reference area: 12.02 m²
+- 550-second bank angle profile digitized from historical records (551 data points)
+- Real altitude and velocity telemetry overlaid on simulation charts
+- You can reproduce Apollo 10's reentry and compare directly to actual data
+
+DRAFT HOOK
+"On May 26, 1969, Apollo 10 hit the atmosphere at 11 km/s after a round trip
+to the Moon. I have its complete bank angle profile, altitude trace, and velocity
+data embedded in this simulation.
+You can reproduce it — and compare your results to the real thing."
+
+BODY
+Tell the human story: Stafford, Young, and Cernan flew the full Apollo mission
+profile without landing. They tested the lunar module separation and rendezvous,
+descended to within 15 km of the surface, then flew home. Their reentry was at
+11 km/s — faster than Apollo 11, because they came back on a faster trajectory.
+Their data is a gold standard for validating reentry simulations.
+
+Note what the comparison reveals: the simplified simulation (exponential atmosphere,
+fixed CD, spherical Earth, no wind) tracks the real Apollo 10 altitude and velocity
+traces with surprising fidelity. That tells you the first-order physics is right.
+
+VISUAL
+Overlay chart: simulated altitude vs. Apollo 10 actual altitude on the same axes.
+The closer they track, the more compelling the post.
+
+CTA
+"Simulation validation against real mission data is one of the most satisfying
+engineering experiences. What historical datasets have you used to validate your work?"
+
+HASHTAGS
+#Apollo #NASAHistory #AerospaceEngineering #SpaceHistory #SimulationValidation
+
+---
+
+POST 8 — Week 4, Thursday
+THE SKIP-ENTRY MANEUVER: How Apollo Managed the Heat
+
+PURPOSE
+Explain the most counterintuitive concept in reentry. High emotional and
+intellectual payoff — this is where the physics gets genuinely dramatic.
+
+KEY POINTS
+- A skip-entry uses lift to "bounce" off the upper atmosphere, extending
+  the reentry corridor and reducing peak heat flux
+- Bank angle is the control input that modulates lift direction
+- Apollo 10's key maneuver: bank angle rolls from 0° to 180° at t=88-96 seconds
+  — this is a full inversion, maximizing downward lift to push into the atmosphere
+  for deceleration, then pull back out
+- Effect: distributes thermal load over a longer time, reduces peak heat flux,
+  increases landing accuracy
+- Tradeoff: more time at high altitude = more total heat absorbed
+
+BANK ANGLE INTUITION
+  σ = 0°   → lift straight up → fights gravity → vehicle tends to skip out
+  σ = 90°  → lift sideways → lateral maneuvering → no altitude change
+  σ = 180° → lift straight down → pushed into atmosphere → maximum drag/decel
+  Apollo 10 used the full range from -86° to 180°
+
+DRAFT HOOK
+"Apollo astronauts didn't just fall through the atmosphere. They flew through it.
+A precisely timed roll maneuver let them 'skip' off the upper atmosphere like a
+stone skipping on water.
+Here's how — and why it was worth the risk."
+
+BODY
+Explain the tradeoff: a pure ballistic (no-lift) reentry has very high peak
+deceleration and very high peak heat flux but is short. A skip-entry extends the
+timeline and reduces peaks — but requires precise guidance. Apollo's guidance
+computer had to execute this maneuver in real time with 1960s hardware.
+
+Show the timeline: at t=88s the bank angle snaps to 180°. Watch what happens
+to the altitude trace — the descent slows, almost stops, before resuming.
+That's the "skip."
+
+VISUAL
+Animated GIF or side-by-side screenshot: bank angle chart at top, altitude chart
+at bottom, with a vertical line showing t=88s where the reversal happens.
+The altitude trace's change in slope at that moment tells the whole story.
+
+CTA
+"Skip-entry is counterintuitive — you fly into the atmosphere to slow down,
+then bounce back up before diving again. What's the most counterintuitive concept
+you've had to explain in your work?"
+
+HASHTAGS
+#SkipEntry #ReentryDynamics #ApolloProgram #AerospaceEngineering #FlightControl
+
+---
+
+POST 9 — Week 5, Monday
+BANK ANGLE AS A CONTROL SYSTEM: 5 Ways to Fly
+
+PURPOSE
+Showcase the interactive design of the bank angle control system.
+Show software depth and design thinking.
+
+PURPOSE
+The simulation offers 5 distinct bank angle control modes, each representing a
+different engineering use case. This post shows that thoughtful UI design is
+engineering, not just aesthetics.
+
+MODES
+
+1. CONSTANT
+   Set one bank angle for the entire trajectory. Good for ballistic entry analysis,
+   quick sensitivity sweeps, and understanding baseline behavior.
+
+2. PIECEWISE
+   Define a series of (time, bank angle) waypoints. Linear interpolation between them.
+   This is closest to how actual guidance systems are programmed — define key maneuver
+   points, let the controller interpolate.
+
+3. VISUAL (Freehand)
+   Draw the bank angle profile directly on a canvas with your mouse.
+   Fastest way to test "what if" scenarios. Surprisingly effective for exploring
+   the design space quickly.
+
+4. CSV IMPORT
+   Upload a CSV file of time-angle data pairs. Useful for testing outputs from
+   guidance algorithm code — paste your algorithm's output directly into the sim.
+
+5. APOLLO 10 HISTORICAL
+   Load the digitized Apollo 10 bank angle profile (551 data points, 0-550 seconds)
+   and fly it yourself. Watch your simulated trajectory match the real mission data.
+
+DRAFT HOOK
+"The only control input for a reentry vehicle is bank angle — a single number
+that determines whether you skip, dive, or drift sideways.
+I built 5 different ways to define it. Here's why each one matters."
+
+VISUAL
+Side-by-side screenshots showing each mode's interface in the control panel.
+
+CTA
+"Which mode would you reach for first? And what mode am I missing?"
+
+HASHTAGS
+#GuidanceNavigation #ReentryTrajectory #AerospaceEngineering #ControlSystems #InteractiveSim
+
+---
+
+POST 10 — Week 5, Thursday
+READING THE DATA: 8 Charts That Tell the Whole Story
+
+PURPOSE
+Walk through the telemetry visualization suite. Show data analysis thinking.
+
+KEY POINTS
+- 8 real-time charts update live as the simulation integrates
+- The relationships between charts reveal more than any single chart alone
+- Crossrange is the most underappreciated — it's what determines whether the
+  recovery ship has to move
+
+THE 8 CHARTS
+
+1.  Bank Angle vs Time       — your control input
+2.  Altitude vs Time         — the descent profile (with Apollo 10 overlay)
+3.  Velocity vs Time         — the deceleration profile
+4.  Deceleration vs Time     — g-forces on the crew (peak ~6g for Apollo)
+5.  Heat Flux vs Time        — thermal load (Sutton-Graves model)
+6.  Flight Path Angle vs Time — how steep is the dive
+7.  Downrange vs Time        — ground track distance covered
+8.  Crossrange vs Time       — lateral deviation from the orbital plane
+
+NON-OBVIOUS INSIGHT
+Peak heat flux (Chart 5) lags behind peak velocity (Chart 3).
+Peak deceleration (Chart 4) lags behind peak heat flux.
+They're driven by the same velocity, but density (which increases with time/depth)
+modulates when each peaks. Understanding this lag is critical for heat shield sizing
+and g-force tolerance design.
+
+DRAFT HOOK
+"A reentry simulation is only useful if you can read what it's telling you.
+I built 8 real-time charts that update live as the simulation runs.
+Here's what each one shows — and why the relationships between them matter
+more than any single chart in isolation."
+
+VISUAL
+Full dashboard screenshot showing all 8 charts simultaneously. Annotate with
+arrows pointing to the peak events.
+
+CTA
+"Crossrange is the metric that determines whether the recovery ship has to move.
+Which of these 8 metrics would you prioritize in reentry vehicle design?"
+
+HASHTAGS
+#DataVisualization #AerospaceEngineering #TelemetryAnalysis #ChartJS #EngineeringDesign
+
+---
+
+POST 11 — Week 6, Monday
+BUILDING THE 3D VIEW: Three.js Meets Trajectory Dynamics
+
+PURPOSE
+Showcase the 3D visualization. Attract software engineers and visual thinkers.
+
+KEY POINTS
+- Three.js (WebGL) for 3D rendering — no game engine, no Unity, just a browser
+- Real-time trajectory line rendering as simulation plays back
+- 3D vehicle model (Apollo capsule or School Bus) with dynamic heat shield state
+- Heat shield color responds to computed heat flux in real time
+- Particle effects for ablation (material burning off the heat shield)
+- Multiple camera modes:
+    Trajectory view — wide angle, see the full descent arc
+    Vehicle-locked — camera follows the spacecraft, nose-on into the atmosphere
+- HUD overlay with live telemetry: altitude, velocity, heat flux, g-force
+
+DRAFT HOOK
+"Telemetry charts tell you what happened. A 3D view shows you what it looked like.
+I built a real-time 3D trajectory viewer using Three.js — so you can watch the
+spacecraft fly, heat up, and slow down from any angle."
+
+BODY
+Talk about the engineering decisions:
+- Three.js chosen for its browser-native WebGL abstraction and scene graph
+- Vehicle state synchronized to the physics simulation timestep (0.1s)
+- Heat shield material changes color (white → orange → red → white) based on
+  computed heat flux — not a fixed animation, actual physics-driven color
+- The trajectory line accumulates point by point as the integrator advances
+- School Bus vehicle option added for levity — and to make the drag/heating
+  tradeoffs viscerally obvious when you look at the reference area slider
+
+VISUAL
+Screen recording (native video upload): camera locked to vehicle as it descends,
+heat shield glowing orange, trajectory line extending behind it, HUD showing
+real-time telemetry.
+
+CTA
+"Building physics-accurate visualizations in the browser is one of my favorite
+engineering challenges. What's the most complex thing you've visualized in a web app?"
+
+HASHTAGS
+#ThreeJS #WebGL #DataVisualization #AerospaceEngineering #JavaScript
+
+---
+
+POST 12 — Week 6, Thursday
+VALIDATE EVERYTHING: Why Apollo 10 Was Baked In From Day One
+
+PURPOSE
+Talk about simulation validation philosophy. This resonates with senior engineers
+and hiring managers — it shows engineering discipline, not just enthusiasm.
+
+KEY POINTS
+- A simulation without validation data is an opinion, not a result
+- Apollo 10 data was embedded early — not added as an afterthought
+- The simplified model (no wind, spherical Earth, fixed CD, no ablation mass loss)
+  still tracks Apollo 10's altitude and velocity with good fidelity
+- What that tells you: these are second-order effects at 3-DOF fidelity level
+- Where the model intentionally diverges:
+    Real Apollo 10: rotating Earth, real wind, variable CD, guidance corrections
+    This simulation: spherical Earth, no wind, fixed CD, user-defined bank profile
+- Knowing which simplifications are acceptable is the actual engineering skill
+
+DRAFT HOOK
+"Anyone can write a simulation.
+The hard part is knowing if it's right.
+Here's how I built validation into this tool from the beginning — and what
+'close enough' actually means in aerospace engineering."
+
+BODY
+Describe the moment the sim matched the Apollo 10 data: altitude curves aligned,
+velocity traces matched, peak deceleration in the right ballpark. Not perfect —
+the real vehicle had guidance corrections this simulation can't replicate. But
+close enough to confirm the first-order physics is correct.
+
+Discuss the principle: a model's value isn't in its complexity, it's in whether
+its simplifications are justified for the intended use. A 3-DOF trajectory tool
+for design space exploration doesn't need 6-DOF or Monte Carlo winds. It needs
+to show the right trends with the right magnitudes.
+
+VISUAL
+Overlay plot showing simulated altitude trace vs. Apollo 10 real altitude,
+with a note on where they diverge and why.
+
+CTA
+"Where do you draw the line between model fidelity and model utility?
+I'd love to hear how you've navigated this tradeoff in your own work."
+
+HASHTAGS
+#ModelValidation #SimulationEngineering #AerospaceEngineering #EngineeringRigor #Apollo
+
+---
+
+POST 13 — Week 7, Monday
+DESIGN SPACE EXPLORATION: What This Tool Actually Enables
+
+PURPOSE
+Connect the simulation to real engineering value. This is not just a demo —
+it's a design tool. Frame it that way.
+
+KEY POINTS
+- Every slider is a real design parameter:
+    Mass (2,000-10,000 kg)
+    Entry velocity (7-12 km/s)
+    Flight path angle (-20° to +5°)
+    Lift-to-drag ratio (0-1.0)
+    Drag coefficient (0.5-2.5)
+    Reference area (5-50 m²)
+- The fundamental reentry design tradeoff:
+    Higher L/D → lower peak heat rate, better landing accuracy → more complex guidance
+    Lower L/D → higher peak heat rate, less accurate → simpler guidance, smaller vehicle
+- Apollo was designed at L/D ≈ 0.3 deliberately — not by default
+- Mercury capsules: L/D ≈ 0 (ballistic) — simple guidance, brutal heating
+- Space Shuttle: L/D ≈ 1.0 — complex guidance, gentle heating, massive vehicle
+
+DRAFT HOOK
+"Every slider in this simulation represents a real engineering decision.
+Mass. Drag coefficient. Reference area. Lift-to-drag ratio. Entry angle.
+Here's what happens when you change them — and why these tradeoffs defined
+the entire Apollo program."
+
+BODY
+Walk through a specific comparison. Set L/D = 0 (ballistic Mercury-style entry):
+watch the heat flux spike and peak deceleration hit 10g+. Now set L/D = 0.5:
+the heat rate drops, the trajectory extends, landing accuracy improves — but now
+the guidance problem gets much harder.
+
+Apollo chose L/D = 0.3 to get crew survivable g-forces (~6g peak), manageable
+heat flux with ablative shield technology of the 1960s, and good enough landing
+accuracy for Pacific recovery. Every number was a deliberate engineering trade.
+
+VISUAL
+Side-by-side simulation screenshots: L/D = 0 vs. L/D = 0.3 vs. L/D = 0.5.
+Show how heat flux peak and deceleration peak shift with L/D.
+
+CTA
+"The Apollo L/D of ~0.3 was a deliberate choice constrained by 1960s ablative
+shield technology and the need to survive 6g. What's the most constrained
+engineering tradeoff you've had to navigate?"
+
+HASHTAGS
+#AerospaceDesign #TradeoffAnalysis #ReentryVehicle #SystemsEngineering #Apollo
+
+---
+
+POST 14 — Week 7, Thursday
+WHAT I LEARNED (AND WHAT'S NEXT)
+
+PURPOSE
+Reflect on the build. Humanize the work. Open doors professionally.
+This is the post that converts viewers into contacts.
+
+KEY POINTS
+- What was hardest: the coupled ODE system, not the 3D graphics
+  (the math is harder than the code)
+- What surprised me most: trajectory sensitivity to entry angle
+  (a 1° error in flight path angle changes the entire outcome — skip-out or burnup)
+- What I'd add next:
+    6-DOF with vehicle rotation and attitude dynamics
+    Actual ablation mass modeling (mass decreasing as heat shield burns)
+    1976 US Standard Atmosphere (tabulated, not exponential)
+    Monte Carlo analysis for entry condition dispersions
+- The broader lesson: serious aerospace simulation is achievable in a browser
+  with modern JavaScript and no external physics engine
+
+DRAFT HOOK
+"I've been building this atmospheric reentry simulator in my spare time.
+Here's what I learned — and why I'm not done yet."
+
+BODY
+Be honest and specific. Talk about:
+- The first time the integrator went unstable and the vehicle flew off to infinity
+  (wrong RK5 coefficient — one number off)
+- How long it took to digitize the Apollo 10 bank angle profile to 1-second
+  resolution from historical records
+- The moment the simulated altitude trace first aligned with the real Apollo 10
+  data — the confirmation that the physics model was right
+- What it means to build something in your free time that you'd be comfortable
+  showing to an aerospace engineer and not being embarrassed
+
+Close with a professional call to action — direct and honest, not vague.
+
+DRAFT CTA
+"I'm actively looking for roles where I can apply this kind of work —
+astrodynamics, trajectory design, aerospace simulation, GN&C, or adjacent fields.
+If you're building something in this space and want to talk, DM me or connect.
+I'd love to hear what you're working on."
+
+VISUAL
+A personal one — maybe a photo at your desk with the sim running in the background,
+or a split-screen of early vs. current version of the tool, or just a clean
+screenshot of the final polished UI. Make it feel like a person behind the work.
+
+HASHTAGS
+#OpenToWork #AerospaceEngineering #Astrodynamics #TrajectoryDesign #CareerInAerospace
+
+===============================
+AFTER THE SERIES: SUMMARY POST
+===============================
+
+After all 14 posts, write a 15th summary post:
+"I spent 7 weeks posting about atmospheric reentry simulation. Here's the whole series."
+- List all 14 posts with one-line summaries and links
+- Add this summary post to your LinkedIn Profile → Featured section
+- This gives every new profile visitor a one-click entry into the full series
+
+===============================
+MEDIA CHECKLIST (per post)
+===============================
+
+Always attach media. LinkedIn prioritizes posts with images or video.
+
+Post 1  — Screen recording (video) of full simulation run
+Post 2  — Graphic of state vector definitions
+Post 3  — Image of formatted equations (use LaTeX renderer or typeset in Figma)
+Post 4  — Chart: atmospheric density vs. altitude
+Post 5  — Heat flux vs. time chart with peak annotation
+Post 6  — Code snippet or RK5 stage diagram
+Post 7  — Overlay chart: simulated altitude vs. Apollo 10 real altitude
+Post 8  — Animated GIF: bank angle reversal + altitude trace at t=88s
+Post 9  — Side-by-side screenshots of all 5 control mode interfaces
+Post 10 — Full dashboard screenshot with all 8 charts
+Post 11 — Screen recording (video) of 3D view with heat shield glowing
+Post 12 — Overlay plot: simulated vs. actual, annotated divergence points
+Post 13 — Side-by-side: L/D=0 vs. L/D=0.3 vs. L/D=0.5 heat flux comparison
+Post 14 — Personal photo or polished UI screenshot
+
+===============================
+ENGAGEMENT STRATEGY
+===============================
+
+TIMING
+- Post Monday and Thursday, 8-10am local time (highest LinkedIn engagement window)
+- Respond to EVERY comment within the first 2 hours
+  (LinkedIn's algorithm treats early engagement as a quality signal)
+
+QUESTIONS
+- End every post with a specific, answerable question
+- "What do you think?" produces nothing. "Which L/D ratio would you choose and why?"
+  produces comments.
+
+SERIES HASHTAG
+- Use #ReentrySimSeries (or your chosen tag) on every single post
+- This lets followers find the full series and new readers binge it
+
+CROSS-PLATFORM
+- If you have Twitter/X: thread the equations posts there, link back to LinkedIn
+- If you have a personal site: embed the simulation and link to it from every post
+
+PROFILE
+- Pin Post 1 to your LinkedIn profile immediately after publishing
+- Add the simulation link to your LinkedIn "Featured" section
+- Update your headline to reference the work: e.g.,
+  "Aerospace Engineer | Atmospheric Reentry Simulation | GN&C"
+
+===============================
+FILES TO REFERENCE WHEN WRITING
+===============================
+
+index.html — physics engine, equations, UI, all Apollo 10 data
+  Search terms:
+    rho_s, beta                — atmospheric density model
+    cashKarp                   — RK5 integrator
+    APOLLO_10_PROFILE          — bank angle historical data
+    drdt, dVdt, dgammadt       — equations of motion
+    heatFlux, suttonGraves     — heating model
+    APOLLO_10_REAL_ALTITUDE    — historical altitude data
+    APOLLO_10_REAL_VELOCITY    — historical velocity data
+
+reentry_trajectory_viz_integrated.html — 3D visualization, Three.js, vehicle models
+
+===============================
+END OF PLAN
+===============================

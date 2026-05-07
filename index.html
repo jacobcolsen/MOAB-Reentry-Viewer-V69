@@ -475,8 +475,27 @@
         <p class="subtitle">3 Degree-of-Freedom Atmospheric Reentry Dynamics</p>
         <p class="credits">Created by <span class="credits-name">Maj "MOAB" Olsen</span> & <span class="credits-name">Claude (Anthropic)</span></p>
 
-        <div class="main-layout">
-            <div class="left-panel">
+        <button id="panel-toggle-btn" onclick="togglePanel()" title="Hide / show controls" style="
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            z-index: 9999;
+            padding: 5px 10px;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            background: rgba(0,0,0,0.6);
+            color: #00d9ff;
+            border: 1px solid rgba(0,217,255,0.4);
+            border-radius: 6px;
+            cursor: pointer;
+            backdrop-filter: blur(4px);
+            transition: opacity 0.2s;
+        ">‹ HIDE</button>
+
+        <div class="main-layout" id="main-layout">
+            <div class="left-panel" id="left-panel">
                 <div class="controls-section">
                     <div class="controls-grid">
                         <div class="control-group">
@@ -675,6 +694,48 @@
                         text-transform: uppercase;
                         letter-spacing: 1px;
                     ">🚀 Launch 3-D Trajectory Visualization</button>
+                </div>
+
+                <div style="margin-top: 8px; padding: 0 12px; display: flex; align-items: center; gap: 6px;">
+                    <button id="warp-slower-btn" title="Slow down" style="
+                        flex: 0 0 auto;
+                        padding: 6px 10px;
+                        font-family: 'Orbitron', sans-serif;
+                        font-size: 13px;
+                        font-weight: 700;
+                        background: rgba(0, 217, 255, 0.12);
+                        color: #00d9ff;
+                        border: 1px solid rgba(0, 217, 255, 0.4);
+                        border-radius: 6px;
+                        cursor: pointer;
+                        transition: background 0.2s;
+                    ">◀◀</button>
+                    <div id="warp-display" style="
+                        flex: 1;
+                        text-align: center;
+                        font-family: 'Orbitron', sans-serif;
+                        font-size: 11px;
+                        font-weight: 700;
+                        color: #00d9ff;
+                        background: rgba(0, 0, 0, 0.4);
+                        border: 1px solid rgba(0, 217, 255, 0.25);
+                        border-radius: 6px;
+                        padding: 6px 4px;
+                        letter-spacing: 1px;
+                    ">TIME WARP<br><span id="warp-speed-label" style="color:#ff00ff;font-size:13px;">x1</span></div>
+                    <button id="warp-faster-btn" title="Speed up" style="
+                        flex: 0 0 auto;
+                        padding: 6px 10px;
+                        font-family: 'Orbitron', sans-serif;
+                        font-size: 13px;
+                        font-weight: 700;
+                        background: rgba(0, 217, 255, 0.12);
+                        color: #00d9ff;
+                        border: 1px solid rgba(0, 217, 255, 0.4);
+                        border-radius: 6px;
+                        cursor: pointer;
+                        transition: background 0.2s;
+                    ">▶▶</button>
                 </div>
             </div>
 
@@ -1511,6 +1572,21 @@
             updateCharts(time, altitude, velocity, deceleration, heatFluxData, fpaData, downrange, crossrange, bankAngleData);
         }
 
+        function makeDotDataset() {
+            return {
+                type: 'scatter',
+                label: '_dot',
+                data: [],
+                pointRadius: 6,
+                pointHoverRadius: 6,
+                pointBackgroundColor: '#ff00ff',
+                pointBorderColor: '#ffffff',
+                pointBorderWidth: 1.5,
+                showLine: false,
+                order: 0
+            };
+        }
+
         function updateCharts(time, altitude, velocity, deceleration, heatFlux, fpa, downrange, crossrange, bankAngle) {
             // Store in charts object for peak indicator toggle
             charts.timeData = time;
@@ -1644,7 +1720,7 @@
                         pointRadius: 0,
                         tension: 0.2,
                         fill: true
-                    }]
+                    }, makeDotDataset()]
                 },
                 options: {
                     responsive: true,
@@ -1655,8 +1731,7 @@
                     scales: {
                         x: { ...sharedXAxisConfig },
                         y: {
-                            grid: { color: 'rgba(255, 255, 255, 0.1)' },
-                            ticks: { color: '#9aa0a6' },
+                            ...sharedYAxisConfig,
                             title: {
                                 display: true,
                                 text: 'Bank Angle (°)',
@@ -1699,6 +1774,7 @@
                 });
             }
 
+            altitudeDatasets.push(makeDotDataset());
             charts.altitude = new Chart(document.getElementById('altitudeChart'), {
                 type: 'line',
                 data: {
@@ -1772,6 +1848,7 @@
                 });
             }
 
+            velocityDatasets.push(makeDotDataset());
             charts.velocity = new Chart(document.getElementById('velocityChart'), {
                 type: 'line',
                 data: {
@@ -1828,7 +1905,7 @@
                         pointRadius: 0,
                         tension: 0.4,
                         fill: true
-                    }]
+                    }, makeDotDataset()]
                 },
                 options: {
                     responsive: true,
@@ -1875,7 +1952,7 @@
                         pointRadius: 0,
                         tension: 0.4,
                         fill: true
-                    }]
+                    }, makeDotDataset()]
                 },
                 options: {
                     responsive: true,
@@ -1927,7 +2004,7 @@
                         pointRadius: 0,
                         tension: 0.4,
                         fill: true
-                    }]
+                    }, makeDotDataset()]
                 },
                 options: {
                     responsive: true,
@@ -1970,7 +2047,7 @@
                         pointRadius: 0,
                         tension: 0.4,
                         fill: false
-                    }]
+                    }, makeDotDataset()]
                 },
                 options: {
                     responsive: true,
@@ -2020,7 +2097,7 @@
                         pointRadius: 0,
                         tension: 0.4,
                         fill: false
-                    }]
+                    }, makeDotDataset()]
                 },
                 options: {
                     responsive: true,
@@ -2059,6 +2136,68 @@
         window.addEventListener('load', () => {
             runSimulation();
         });
+
+        function togglePanel() {
+            const panel = document.getElementById('left-panel');
+            const layout = document.getElementById('main-layout');
+            const btn = document.getElementById('panel-toggle-btn');
+            const hiding = panel.style.display !== 'none';
+            panel.style.display = hiding ? 'none' : '';
+            layout.style.gridTemplateColumns = hiding ? '1fr' : '300px 1fr';
+            layout.style.gap = hiding ? '0' : '';
+            btn.textContent = hiding ? '› SHOW' : '‹ HIDE';
+        }
+
+        // ── Chart dot sync from viz tool animation ──────────────────────────
+        function updateChartDots(t) {
+            const timeData = charts.timeData;
+            if (!timeData || timeData.length === 0) return;
+
+            // Find closest index to time t
+            let idx = 0;
+            let minDiff = Infinity;
+            for (let i = 0; i < timeData.length; i++) {
+                const diff = Math.abs(timeData[i] - t);
+                if (diff < minDiff) { minDiff = diff; idx = i; }
+            }
+
+            function setDot(chart, x, y) {
+                if (!chart) return;
+                const ds = chart.data.datasets;
+                const dotDs = ds[ds.length - 1];
+                if (dotDs && dotDs.label === '_dot') {
+                    dotDs.data = [{ x, y }];
+                    chart.update('none');
+                }
+            }
+
+            setDot(charts.bankAngle,  timeData[idx], charts.bankAngleData[idx]);
+            setDot(charts.altitude,   timeData[idx], charts.altitudeData[idx]);
+            setDot(charts.velocity,   timeData[idx], charts.velocityData[idx]);
+            setDot(charts.decel,      timeData[idx], charts.decelData[idx]);
+            setDot(charts.heat,       timeData[idx], (charts.heatFluxData[idx] || 0) / 1000);
+            setDot(charts.fpa,        timeData[idx], charts.fpaData[idx]);
+            setDot(charts.downrange,  charts.downrangeData[idx],  charts.altitudeData[idx]);
+            setDot(charts.crossrange, charts.crossrangeData[idx], charts.altitudeData[idx]);
+        }
+
+        window.addEventListener('message', (event) => {
+            if (event.data && event.data.type === 'ANIM_TIME_UPDATE') {
+                updateChartDots(event.data.time);
+            }
+        });
+
+        // Mirror the viz tool's '.' / ',' warp shortcuts on this page
+        document.addEventListener('keydown', (e) => {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+            if (e.key === '.' || e.key === '>') {
+                e.preventDefault();
+                window.sendToViz && window.sendToViz({ type: 'WARP_DELTA', delta: +1 });
+            } else if (e.key === ',' || e.key === '<') {
+                e.preventDefault();
+                window.sendToViz && window.sendToViz({ type: 'WARP_DELTA', delta: -1 });
+            }
+        });
     </script>
     
     <script>
@@ -2077,7 +2216,7 @@
                 if (event.data && event.data.type === 'vizReady') {
                     console.log('[VIS-BRIDGE] Received vizReady handshake from visualization');
                     vizReady = true;
-                    
+
                     // Immediately send current trajectory if available
                     if (telemetryBuffer.length > 0) {
                         console.log('[VIS-BRIDGE] Sending buffered trajectory data after vizReady');
@@ -2086,9 +2225,21 @@
                         console.log('[VIS-BRIDGE] No trajectory data buffered yet, waiting for simulation');
                     }
                 }
+
+                if (event.data && event.data.type === 'WARP_UPDATE') {
+                    const label = document.getElementById('warp-speed-label');
+                    if (label) label.textContent = `x${event.data.speed}`;
+                }
             });
             /* === END FIX === */
             
+            // Expose send helper for warp controls
+            window.sendToViz = function(msg) {
+                if (vizWindow && !vizWindow.closed) {
+                    vizWindow.postMessage(msg, '*');
+                }
+            };
+
             // Connect to existing visualization launch button
             function connectLaunchButton() {
                 const btn = document.getElementById('launch-viz-btn');
@@ -2109,6 +2260,12 @@
                         /* === END FIX === */
                     };
                 }
+
+                // Warp buttons
+                const slowerBtn = document.getElementById('warp-slower-btn');
+                const fasterBtn = document.getElementById('warp-faster-btn');
+                if (slowerBtn) slowerBtn.onclick = () => window.sendToViz({ type: 'WARP_DELTA', delta: -1 });
+                if (fasterBtn) fasterBtn.onclick = () => window.sendToViz({ type: 'WARP_DELTA', delta: +1 });
             }
             
             // Convert latitude/longitude to Cartesian coordinates

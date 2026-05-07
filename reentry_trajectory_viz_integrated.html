@@ -4402,6 +4402,14 @@ function initializeVehicleViewer(containerElement, config = {}) {
             
             // Listen for trajectory data from parent window
             window.addEventListener('message', (event) => {
+                if (event.data && event.data.type === 'WARP_DELTA') {
+                    updateWarpLevel(event.data.delta);
+                    // Reply with new speed so parent display stays in sync
+                    if (window.opener && !window.opener.closed) {
+                        window.opener.postMessage({ type: 'WARP_UPDATE', speed: warpScales[warpLevel] }, '*');
+                    }
+                }
+
                 if (event.data && event.data.type === 'TRAJECTORY_DATA') {
                     /* === FIX: EXTERNAL TRAJECTORY AUTHORITY === */
                     console.log('[VIS-BRIDGE] ✓ RECEIVED TRAJECTORY_DATA');
@@ -6312,6 +6320,7 @@ function initializeVehicleViewer(containerElement, config = {}) {
             // === REAL-TIME CLOCK SYSTEM ===
             let lastRealTime = performance.now(); // High precision wall-clock time in milliseconds
             let simulationTime = 0; // Cumulative simulation time in seconds
+            let lastChartSyncTime = 0; // Throttle chart dot postMessage to ~20fps
             
             // Calculate trajectory duration (for proper real-time scaling)
             // Assuming trajectory represents ~1500 seconds of flight time
@@ -6474,6 +6483,15 @@ function initializeVehicleViewer(containerElement, config = {}) {
                     if (cameraState.vehicleLocked && cameraState.mode === 'trajectory') {
                         cameraState.targetPivot.set(point.x, point.y, point.z);
                     }
+
+                    // Sync current simulation time to parent window chart dots (~20fps)
+                    if (window.opener && !window.opener.closed) {
+                        const _nowMs = performance.now();
+                        if (_nowMs - lastChartSyncTime > 50) {
+                            lastChartSyncTime = _nowMs;
+                            window.opener.postMessage({ type: 'ANIM_TIME_UPDATE', time: point.time != null ? point.time : simulationTime }, '*');
+                        }
+                    }
                 } else {
                     // Hide HUD and Gauges when not animating
                     hudCanvas.classList.remove('active');
@@ -6606,6 +6624,43 @@ function initializeVehicleViewer(containerElement, config = {}) {
             // === END INTEGRATION ===
 
             animate();
+
+            // Keep simulation + chart sync running when this tab is in the background.
+            // requestAnimationFrame throttles to ~1fps in hidden tabs, so we switch to
+            // setInterval for the time-advance and postMessage work only.
+            let bgSyncInterval = null;
+
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden) {
+                    // Tab went to background — start interval to keep time moving
+                    if (!bgSyncInterval) {
+                        bgSyncInterval = setInterval(() => {
+                            if (!animating || !animationMarker || trajectory.length === 0) return;
+
+                            const now = performance.now();
+                            const deltaMs = Math.min(now - lastRealTime, 100); // cap to avoid jumps
+                            lastRealTime = now;
+
+                            const simDelta = (deltaMs / 1000) * playbackTimeScale;
+                            simulationTime += simDelta;
+                            animationProgress = (simulationTime / trajectoryDurationSeconds) % 1.0;
+
+                            if (window.opener && !window.opener.closed) {
+                                const idx = Math.floor(animationProgress * (trajectory.length - 1));
+                                const point = trajectory[idx];
+                                window.opener.postMessage({
+                                    type: 'ANIM_TIME_UPDATE',
+                                    time: point.time != null ? point.time : simulationTime
+                                }, '*');
+                            }
+                        }, 50); // ~20 fps
+                    }
+                } else {
+                    // Tab came back to foreground — hand off back to requestAnimationFrame
+                    if (bgSyncInterval) { clearInterval(bgSyncInterval); bgSyncInterval = null; }
+                    lastRealTime = performance.now(); // reset so first rAF frame has a sane delta
+                }
+            });
         }
     </script>
 </body>
