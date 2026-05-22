@@ -4877,9 +4877,12 @@ function initializeVehicleViewer(containerElement, config = {}) {
                 horizonLocked: false, // if true, camera up vector aligned with local vertical
 
                 // Chase camera — local-frame tracking
-                smoothedUp: new THREE.Vector3(0, 1, 0),    // interpolated local vertical
-                chasePosition: new THREE.Vector3(0, 0, 0), // computed camera position this frame
-                chaseUpLerpSpeed: 0.03,                    // pivot speed (lower = slower, smoother)
+                smoothedUp: new THREE.Vector3(0, 1, 0),       // interpolated local vertical
+                smoothedVelocity: new THREE.Vector3(0, 0, 1), // interpolated forward direction
+                chasePosition: new THREE.Vector3(0, 0, 0),    // target camera position (smoothed)
+                chaseUpLerpSpeed: 0.05,   // up-vector pivot rate
+                chaseVelLerpSpeed: 0.08,  // forward-direction smoothing rate
+                chasePosLerpSpeed: 0.12,  // final camera-position smoothing rate
                 
                 // Mode-specific zoom constraints
                 zoomLimits: {
@@ -4942,7 +4945,7 @@ function initializeVehicleViewer(containerElement, config = {}) {
 
                 // Chase camera: bypass spherical coords, use vehicle-local frame
                 if (cameraState.vehicleLocked && cameraState.mode === 'trajectory') {
-                    camera.position.copy(cameraState.chasePosition);
+                    camera.position.lerp(cameraState.chasePosition, cameraState.chasePosLerpSpeed);
                     camera.up.copy(cameraState.smoothedUp);
                     camera.lookAt(pivotPoint);
                     pivotIndicator.visible = false;
@@ -6095,8 +6098,9 @@ function initializeVehicleViewer(containerElement, config = {}) {
                                     const localUpY = currentPoint.y / upMag;
                                     const localUpZ = currentPoint.z / upMag;
 
-                                    // Seed smoothed up so first chase frame has no jump
+                                    // Seed smoothed vectors so first chase frame has no jump
                                     cameraState.smoothedUp.set(localUpX, localUpY, localUpZ);
+                                    cameraState.smoothedVelocity.set(normVelX, normVelY, normVelZ);
 
                                     // STEP 3: Position camera BEHIND vehicle
                                     // CameraPosition = VehiclePosition - (NormalizedVelocity * ChaseDistance) + (LocalUpVector * VerticalOffset)
@@ -6503,36 +6507,39 @@ function initializeVehicleViewer(containerElement, config = {}) {
                     if (cameraState.vehicleLocked && cameraState.mode === 'trajectory') {
                         cameraState.targetPivot.set(point.x, point.y, point.z);
 
-                        // Velocity direction for current index
+                        // Wide-window velocity: span ±8 points to average out per-point noise.
+                        // This prevents single-point jitter from amplifying through the 200-unit chase offset.
                         const idx = Math.floor(animationProgress * (trajectory.length - 1));
-                        let vx = 0, vy = 0, vz = 0;
-                        if (idx < trajectory.length - 1) {
-                            const np = trajectory[idx + 1];
-                            vx = np.x - point.x; vy = np.y - point.y; vz = np.z - point.z;
-                        } else if (idx > 0) {
-                            const pp = trajectory[idx - 1];
-                            vx = point.x - pp.x; vy = point.y - pp.y; vz = point.z - pp.z;
-                        }
+                        const span = 8;
+                        const iA = Math.max(0, idx - span);
+                        const iB = Math.min(trajectory.length - 1, idx + span);
+                        const pA = trajectory[iA], pB = trajectory[iB];
+                        let vx = pB.x - pA.x, vy = pB.y - pA.y, vz = pB.z - pA.z;
                         const vm = Math.sqrt(vx*vx + vy*vy + vz*vz);
                         if (vm > 0) {
                             vx /= vm; vy /= vm; vz /= vm;
 
-                            // True local up = radial from Earth center through vehicle
-                            const um = Math.sqrt(point.x**2 + point.y**2 + point.z**2);
-                            const trueUpX = point.x / um, trueUpY = point.y / um, trueUpZ = point.z / um;
-
-                            // Slowly interpolate smoothedUp toward the true local vertical (gradual pivot)
-                            cameraState.smoothedUp.lerp(
-                                new THREE.Vector3(trueUpX, trueUpY, trueUpZ),
-                                cameraState.chaseUpLerpSpeed
+                            // Lerp smoothedVelocity toward the wide-window direction
+                            cameraState.smoothedVelocity.lerp(
+                                new THREE.Vector3(vx, vy, vz),
+                                cameraState.chaseVelLerpSpeed
                             ).normalize();
 
-                            // Recompute chase position in vehicle's local frame
+                            // True local up = radial from Earth center through vehicle
+                            const um = Math.sqrt(point.x**2 + point.y**2 + point.z**2);
+                            const trueUp = new THREE.Vector3(point.x / um, point.y / um, point.z / um);
+
+                            // Slowly interpolate smoothedUp toward the true local vertical
+                            cameraState.smoothedUp.lerp(trueUp, cameraState.chaseUpLerpSpeed).normalize();
+
+                            // Recompute target chase position using smoothed directions
                             const chaseDistance = 200, verticalOffset = 80;
+                            const sv = cameraState.smoothedVelocity;
+                            const su = cameraState.smoothedUp;
                             cameraState.chasePosition.set(
-                                point.x - vx * chaseDistance + cameraState.smoothedUp.x * verticalOffset,
-                                point.y - vy * chaseDistance + cameraState.smoothedUp.y * verticalOffset,
-                                point.z - vz * chaseDistance + cameraState.smoothedUp.z * verticalOffset
+                                point.x - sv.x * chaseDistance + su.x * verticalOffset,
+                                point.y - sv.y * chaseDistance + su.y * verticalOffset,
+                                point.z - sv.z * chaseDistance + su.z * verticalOffset
                             );
                         }
                     }
