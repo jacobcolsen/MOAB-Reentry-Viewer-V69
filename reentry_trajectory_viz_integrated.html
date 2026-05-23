@@ -4883,6 +4883,14 @@ function initializeVehicleViewer(containerElement, config = {}) {
                 chaseUpLerpSpeed: 0.05,   // up-vector pivot rate
                 chaseVelLerpSpeed: 0.08,  // forward-direction smoothing rate
                 chasePosLerpSpeed: 0.12,  // final camera-position smoothing rate
+
+                // Chase camera — user-adjustable local-frame orbit
+                // chaseYaw:   angle (rad) around vehicle's up axis; 0 = directly behind
+                // chasePitch: elevation (rad) above vehicle's horizontal plane
+                // chaseRadius: distance from vehicle
+                chaseYaw: 0,
+                chasePitch: Math.asin(80 / Math.sqrt(200*200 + 80*80)),  // ~21.8° default
+                chaseRadius: Math.sqrt(200*200 + 80*80),                  // ~215 default
                 
                 // Mode-specific zoom constraints
                 zoomLimits: {
@@ -4945,6 +4953,22 @@ function initializeVehicleViewer(containerElement, config = {}) {
 
                 // Chase camera: bypass spherical coords, use vehicle-local frame
                 if (cameraState.vehicleLocked && cameraState.mode === 'trajectory') {
+                    // Recompute chase position from local-frame spherical coords every call
+                    // (uses pivotPoint so this works during drag while paused too)
+                    const sv = cameraState.smoothedVelocity;
+                    const su = cameraState.smoothedUp;
+                    const sr = new THREE.Vector3().crossVectors(sv, su).normalize();
+                    const cy = cameraState.chaseYaw;
+                    const cp = cameraState.chasePitch;
+                    const cr = cameraState.chaseRadius;
+                    const oFwd   = -Math.cos(cp) * Math.cos(cy);
+                    const oRight =  Math.cos(cp) * Math.sin(cy);
+                    const oUp    =  Math.sin(cp);
+                    cameraState.chasePosition.set(
+                        pivotPoint.x + sv.x*oFwd*cr + sr.x*oRight*cr + su.x*oUp*cr,
+                        pivotPoint.y + sv.y*oFwd*cr + sr.y*oRight*cr + su.y*oUp*cr,
+                        pivotPoint.z + sv.z*oFwd*cr + sr.z*oRight*cr + su.z*oUp*cr
+                    );
                     camera.position.lerp(cameraState.chasePosition, cameraState.chasePosLerpSpeed);
                     camera.up.copy(cameraState.smoothedUp);
                     camera.lookAt(pivotPoint);
@@ -4993,6 +5017,17 @@ function initializeVehicleViewer(containerElement, config = {}) {
             // Orbit camera in local frame (used in trajectory mode with horizonLocked).
             // deltaH = horizontal screen drag scaled by speed, deltaV = vertical screen drag scaled by speed.
             function orbitLocalFrame(deltaH, deltaV) {
+                // When chase camera is active, update local-frame orbit angles directly
+                if (cameraState.vehicleLocked && cameraState.mode === 'trajectory') {
+                    cameraState.chaseYaw   += deltaH;
+                    cameraState.chasePitch  = THREE.MathUtils.clamp(
+                        cameraState.chasePitch - deltaV,
+                        -Math.PI / 2 + 0.05,
+                        Math.PI / 2 - 0.05
+                    );
+                    return;
+                }
+
                 const pivot = cameraState.pivotPoint;
                 const localUp = pivot.clone().normalize();
                 const offset = camera.position.clone().sub(pivot);
@@ -5969,9 +6004,15 @@ function initializeVehicleViewer(containerElement, config = {}) {
                     // Normal scroll = Exponential zoom
                     const limits = getCurrentZoomLimits();
                     const zoomFactor = e.deltaY > 0 ? cameraState.zoomSpeed : (1 / cameraState.zoomSpeed);
-                    
-                    cameraState.radius *= zoomFactor;
-                    cameraState.radius = Math.max(limits.min, Math.min(limits.max, cameraState.radius));
+
+                    if (cameraState.vehicleLocked && cameraState.mode === 'trajectory') {
+                        // Zoom adjusts chase distance, not world-space radius
+                        cameraState.chaseRadius *= zoomFactor;
+                        cameraState.chaseRadius = Math.max(50, Math.min(limits.max, cameraState.chaseRadius));
+                    } else {
+                        cameraState.radius *= zoomFactor;
+                        cameraState.radius = Math.max(limits.min, Math.min(limits.max, cameraState.radius));
+                    }
                 }
                 
                 updateCameraFromSpherical();
@@ -6101,6 +6142,11 @@ function initializeVehicleViewer(containerElement, config = {}) {
                                     // Seed smoothed vectors so first chase frame has no jump
                                     cameraState.smoothedUp.set(localUpX, localUpY, localUpZ);
                                     cameraState.smoothedVelocity.set(normVelX, normVelY, normVelZ);
+
+                                    // Reset local-frame orbit to default behind/above position
+                                    cameraState.chaseYaw = 0;
+                                    cameraState.chasePitch = Math.asin(80 / Math.sqrt(200*200 + 80*80));
+                                    cameraState.chaseRadius = Math.sqrt(200*200 + 80*80);
 
                                     // STEP 3: Position camera BEHIND vehicle
                                     // CameraPosition = VehiclePosition - (NormalizedVelocity * ChaseDistance) + (LocalUpVector * VerticalOffset)
@@ -6532,15 +6578,7 @@ function initializeVehicleViewer(containerElement, config = {}) {
                             // Slowly interpolate smoothedUp toward the true local vertical
                             cameraState.smoothedUp.lerp(trueUp, cameraState.chaseUpLerpSpeed).normalize();
 
-                            // Recompute target chase position using smoothed directions
-                            const chaseDistance = 200, verticalOffset = 80;
-                            const sv = cameraState.smoothedVelocity;
-                            const su = cameraState.smoothedUp;
-                            cameraState.chasePosition.set(
-                                point.x - sv.x * chaseDistance + su.x * verticalOffset,
-                                point.y - sv.y * chaseDistance + su.y * verticalOffset,
-                                point.z - sv.z * chaseDistance + su.z * verticalOffset
-                            );
+                            // (chasePosition is recomputed in updateCameraFromSpherical each frame)
                         }
                     }
 
