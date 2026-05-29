@@ -677,6 +677,24 @@
                     </div>
                 </div>
 
+                <div style="margin-top: 12px; padding: 0 12px;">
+                    <div style="font-family: 'Orbitron', sans-serif; font-size: 10px; font-weight: 700; color: #ff4444; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 8px; border-bottom: 1px solid rgba(255, 68, 68, 0.3); padding-bottom: 4px;">
+                        Design Constraints
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+                        <label style="font-size: 0.6rem; color: var(--text-secondary); font-family: 'Roboto Mono', monospace; flex: 1; white-space: nowrap;">Max Decel</label>
+                        <input type="number" id="decel-constraint" min="0" step="1" placeholder="off"
+                            style="width: 68px; background: var(--primary-bg); border: 1px solid rgba(255, 68, 68, 0.4); border-radius: 4px; padding: 4px 6px; color: #ff4444; font-family: 'Roboto Mono', monospace; font-size: 0.65rem; text-align: right;">
+                        <span style="font-size: 0.6rem; color: var(--text-secondary); font-family: 'Roboto Mono', monospace;">g</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <label style="font-size: 0.6rem; color: var(--text-secondary); font-family: 'Roboto Mono', monospace; flex: 1; white-space: nowrap;">Max Heat Flux</label>
+                        <input type="number" id="heat-constraint" min="0" step="100" placeholder="off"
+                            style="width: 68px; background: var(--primary-bg); border: 1px solid rgba(255, 68, 68, 0.4); border-radius: 4px; padding: 4px 6px; color: #ff4444; font-family: 'Roboto Mono', monospace; font-size: 0.65rem; text-align: right;">
+                        <span style="font-size: 0.6rem; color: var(--text-secondary); font-family: 'Roboto Mono', monospace;">kW/m²</span>
+                    </div>
+                </div>
+
                 <div style="margin-top: 15px; padding: 0 12px;">
                     <button id="launch-viz-btn" style="
                         width: 100%;
@@ -1114,6 +1132,14 @@
             document.getElementById('peak-indicator-toggle').addEventListener('change', () => {
                 updateCharts(charts.timeData, charts.altitudeData, charts.velocityData, charts.decelData, charts.heatFluxData, charts.fpaData, charts.downrangeData, charts.crossrangeData, charts.bankAngleData);
             });
+
+            ['decel-constraint', 'heat-constraint'].forEach(id => {
+                document.getElementById(id).addEventListener('input', () => {
+                    if (charts.timeData) {
+                        updateCharts(charts.timeData, charts.altitudeData, charts.velocityData, charts.decelData, charts.heatFluxData, charts.fpaData, charts.downrangeData, charts.crossrangeData, charts.bankAngleData);
+                    }
+                });
+            });
         });
 
         // Apollo 10 Indicator Functions
@@ -1544,6 +1570,29 @@
             const tempFormatted = Math.round(maxTempF).toLocaleString('en-US');
             document.getElementById('stag-temp').innerHTML = `${tempFormatted}<span class="metric-unit">°F</span>`;
 
+            // Highlight metric cards that violate design constraints
+            const _dc = parseFloat(document.getElementById('decel-constraint').value) || null;
+            const _hc = parseFloat(document.getElementById('heat-constraint').value)  || null;
+
+            const decelCard = document.getElementById('max-decel').parentElement;
+            if (_dc && maxDecel > _dc) {
+                decelCard.style.borderColor = 'rgba(255, 68, 68, 0.6)';
+                decelCard.style.boxShadow   = '0 0 8px rgba(255, 68, 68, 0.4)';
+            } else {
+                decelCard.style.borderColor = '';
+                decelCard.style.boxShadow   = '';
+            }
+
+            const heatCard    = document.getElementById('peak-heat').parentElement;
+            const peakHeatKW  = maxHeat / 1000;
+            if (_hc && peakHeatKW > _hc) {
+                heatCard.style.borderColor = 'rgba(255, 68, 68, 0.6)';
+                heatCard.style.boxShadow   = '0 0 8px rgba(255, 68, 68, 0.4)';
+            } else {
+                heatCard.style.borderColor = '';
+                heatCard.style.boxShadow   = '';
+            }
+
             // Store data for toggle functionality
             charts.timeData = time;
             charts.altitudeData = altitude;
@@ -1698,6 +1747,10 @@
                 borderWidth: 2,
                 borderDash: [5, 5]
             } : null;
+
+            // Read student-defined design constraints
+            const decelConstraintVal = parseFloat(document.getElementById('decel-constraint').value) || null;
+            const heatConstraintVal  = parseFloat(document.getElementById('heat-constraint').value)  || null;
 
             // Altitude Chart
             if (charts.altitude) charts.altitude.destroy();
@@ -1890,6 +1943,17 @@
             
             const decelAnnotations = {};
             if (verticalLineAnnotation) decelAnnotations.verticalLine = verticalLineAnnotation;
+            if (decelConstraintVal) {
+                decelAnnotations.decelLimit = {
+                    type: 'line', scaleID: 'y', value: decelConstraintVal,
+                    borderColor: '#ff4444', borderWidth: 2, borderDash: [8, 4],
+                    label: {
+                        content: `Limit: ${decelConstraintVal}g`, display: true,
+                        position: 'start', backgroundColor: 'rgba(255, 68, 68, 0.15)',
+                        color: '#ff4444', font: { family: 'Roboto Mono', size: 10 }
+                    }
+                };
+            }
             
             // Convert to x-y data points
             const decelData = time.map((t, i) => ({ x: t, y: deceleration[i] }));
@@ -1937,6 +2001,17 @@
             
             const heatAnnotations = {};
             if (verticalLineAnnotation) heatAnnotations.verticalLine = verticalLineAnnotation;
+            if (heatConstraintVal) {
+                heatAnnotations.heatLimit = {
+                    type: 'line', scaleID: 'y', value: heatConstraintVal,
+                    borderColor: '#ff4444', borderWidth: 2, borderDash: [8, 4],
+                    label: {
+                        content: `Limit: ${heatConstraintVal.toLocaleString()}kW/m²`, display: true,
+                        position: 'start', backgroundColor: 'rgba(255, 68, 68, 0.15)',
+                        color: '#ff4444', font: { family: 'Roboto Mono', size: 10 }
+                    }
+                };
+            }
             
             // Convert to x-y data points
             const heatFluxDataPoints = time.map((t, i) => ({ x: t, y: heatFlux[i] / 1000 })); // Convert to kW/m²
