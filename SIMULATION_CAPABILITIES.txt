@@ -1,0 +1,537 @@
+================================================================================
+  ATMOSPHERIC REENTRY CONTROL SIMULATION — CAPABILITY DESCRIPTION
+  Created by Maj "MOAB" Olsen & Claude (Anthropic)
+================================================================================
+
+OVERVIEW
+--------
+This is a browser-based, physically rigorous atmospheric reentry simulation built
+as a single-page web application. It combines a real-time 3-Degree-of-Freedom
+(3-DOF) flight mechanics engine with live interactive charts and an optional
+full-3D trajectory visualization window. No installation required; everything
+runs locally in a web browser.
+
+The simulation is designed to accurately model the dynamics of any blunt-body or
+lifting-body reentry vehicle — from an Apollo capsule to the Space Shuttle — and
+can reproduce historical missions such as the Apollo 10 reentry of May 26, 1969.
+
+
+================================================================================
+  PART 1: PHYSICS ENGINE
+================================================================================
+
+EQUATIONS OF MOTION (3-DOF Spherical Earth)
+---------------------------------------------
+The simulation integrates a six-state vector over time using a full spherical
+Earth model. The state vector is:
+
+  [r, theta, phi, V, gamma, psi]
+
+  r     — Radial distance from Earth's center (km)
+  theta — Longitude (East positive, radians)
+  phi   — Latitude (North positive, radians)
+  V     — Velocity magnitude (km/s)
+  gamma — Flight path angle (radians; negative = descending)
+  psi   — Heading angle (radians; 0 = North, 90° = East)
+
+The six coupled differential equations govern:
+  1. Radial position rate (altitude change)
+  2. Longitude rate
+  3. Latitude rate
+  4. Velocity rate (drag deceleration minus gravity component)
+  5. Flight path angle rate (lift + centrifugal - gravity)
+  6. Heading angle rate (lateral lift + Coriolis-like curvature term)
+
+NUMERICAL INTEGRATOR: RK5 CASH-KARP
+--------------------------------------
+The equations of motion are integrated using a 5th-order Runge-Kutta method
+(Cash-Karp coefficients). This provides high accuracy for smooth trajectories
+and is more stable than simpler Euler or RK4 methods. Time step: 0.1 seconds.
+Maximum simulation duration: 2,500 seconds.
+
+ATMOSPHERIC MODEL
+-----------------
+The simulation uses an exponential atmospheric density model:
+
+  rho(h) = rho_s * exp(-beta * h)
+
+  rho_s = 1.225 kg/m³   (sea-level density)
+  beta  = 0.14 km⁻¹     (scale height inverse)
+
+This model is consistent with the Apollo-era atmospheric model used in NASA
+flight mechanics analyses and accurately captures the density variation from
+high altitude (>120 km) through peak heating and deceleration zones.
+
+GRAVITY MODEL
+-------------
+Gravity uses an inverse-square law referenced to a characteristic radius:
+
+  g(r) = g_0 * (r_0 / r)²
+
+  g_0 = 9.81e-3 km/s²  (sea-level gravity)
+  r_0 = 6,500 km        (reference radius)
+
+This accounts for the reduction of gravitational acceleration with altitude,
+which matters significantly at reentry interface (~120 km) and during skip
+trajectories where altitude variation is large.
+
+AERODYNAMIC FORCE MODEL
+------------------------
+Lift and drag accelerations are computed at each integration step:
+
+  Drag = -(1/2) * rho * C_D * S * V² / m    (decelerating)
+  Lift = +(1/2) * rho * C_L * S * V² / m    (perpendicular to velocity)
+
+  C_L is derived from C_D * L/D ratio
+  All quantities resolved in SI units (density converted from kg/m³ to kg/km³
+  for consistency with km-based state vector)
+
+Bank angle (sigma) modulates how lift is split between the vertical plane
+(pitch — altitude control) and lateral plane (yaw — crossrange control):
+  Vertical lift component: Lift * cos(sigma)
+  Lateral lift component:  Lift * sin(sigma)
+
+HEAT FLUX MODEL
+---------------
+Stagnation point aerodynamic heating uses a modified Chapman correlation:
+
+  q = 199,830 * (rho/rho_s)^0.5 * (V/V_orbit)^3.15   [W/m²]
+
+  V_orbit = orbital velocity at sea level (~7.9 km/s)
+
+STAGNATION TEMPERATURE
+-----------------------
+Freestream stagnation temperature is computed from adiabatic compression:
+
+  T_stag = T_inf * [1 + ((gamma-1)/2) * M²]
+
+  gamma = 1.4 (ratio of specific heats for air)
+  T_inf = 288 K (ambient temperature)
+  M = Mach number computed from velocity and speed of sound
+
+Output is reported in degrees Fahrenheit.
+
+DOWNRANGE / CROSSRANGE
+-----------------------
+The simulation computes true orbital-plane-referenced downrange and crossrange
+distances using ECEF (Earth-Centered Earth-Fixed) vector math:
+
+  - The initial position and velocity vectors define an orbital plane
+  - The plane's normal vector is computed via cross product
+  - Crossrange = perpendicular distance from the orbital plane (km)
+  - Downrange = arc length traveled within the orbital plane (km)
+
+This matches the range definition used by NASA mission planners and avoids the
+distortions of simple lat/lon-based range calculations over long trajectories.
+
+
+================================================================================
+  PART 2: USER-ADJUSTABLE INPUT PARAMETERS
+================================================================================
+
+All parameters update the simulation in real time as sliders move.
+
+VEHICLE MASS
+  Range: 2,000 — 10,000 kg
+  Default: 5,000 kg
+  Effect: Heavier vehicles have lower ballistic coefficient sensitivity; lighter
+          vehicles decelerate and heat faster at a given C_D and area.
+
+ENTRY VELOCITY
+  Range: 7.0 — 12.0 km/s
+  Default: 9.0 km/s
+  Notes: 7.9 km/s ≈ circular orbital velocity; values above ~11 km/s are
+         representative of lunar return (Apollo-class); 12 km/s approaches
+         the fastest practical reentry corridors.
+
+FLIGHT PATH ANGLE (FPA)
+  Range: -20.0° — +5.0°
+  Default: -5.0°
+  Effect: Shallower angles (near 0°) risk skip-out; steeper angles (approaching
+          -20°) create dramatically higher peak heating and g-loads. This single
+          parameter most strongly controls the severity of the reentry.
+
+BANK ANGLE (5 Input Modes — see Part 3)
+  Range: 0° — 180° (or negative values in piecewise/CSV/Apollo modes)
+  Default: 0° (lift-up, maximum altitude control authority)
+  Effect: Controls the direction of the lift vector. 0° = lift fully up
+          (pulls vehicle up, reduces heating). 90° = lift sideways (generates
+          crossrange). 180° = lift down (pushes vehicle deeper, maximizes
+          heating and g-load).
+
+LIFT-TO-DRAG RATIO (L/D)
+  Range: 0.00 — 1.00
+  Default: 0.30
+  Notable values:
+    0.00 — Ballistic (no lift); also selects School Bus vehicle model
+    0.18 — Approximate Apollo CM
+    0.30 — Generic lifting capsule
+    0.35 — Dream Chaser threshold
+    0.65 — X-37B threshold
+    0.75 — Shuttle Orbiter threshold
+  Note: L/D also automatically selects the vehicle model in the 3D visualizer.
+
+DRAG COEFFICIENT (C_D)
+  Range: 0.5 — 2.5
+  Default: 1.5
+  Note: Combined with reference area and L/D to compute full aerodynamic forces.
+        Apollo CM: ~1.28. Blunt capsules typically 1.2–1.6. Lifting bodies lower.
+
+REFERENCE AREA (S)
+  Range: 5 — 50 m²
+  Default: 15 m²
+  Note: The cross-sectional reference area for aerodynamic force calculations.
+        Apollo CM: ~12 m². Space Shuttle: ~250 m². Stardust SRC: ~0.52 m².
+
+
+================================================================================
+  PART 3: BANK ANGLE INPUT MODES
+================================================================================
+
+Five distinct bank angle control strategies are available, switchable via
+tab-style mode buttons. Each feeds directly into the physics engine.
+
+MODE 1: CONSTANT
+  A single slider sets a fixed bank angle for the entire trajectory.
+  Best for: Quick parameter sweeps, understanding isolated L/D vs. FPA effects.
+
+MODE 2: PIECEWISE (Waypoint Editor)
+  An editable list of time/angle waypoint pairs. The simulation linearly
+  interpolates between waypoints. Points can be added, edited, or deleted.
+  Each waypoint specifies: Time (seconds) and Bank Angle (degrees).
+  Minimum 2 waypoints required.
+  Best for: Approximating planned bank reversal sequences (roll reversals).
+
+MODE 3: VISUAL (Freehand Canvas Editor)
+  A drawing canvas with a time axis (0–2,500 s) and angle axis (-90° to +180°).
+  Users draw the bank angle profile freehand with the mouse. A smoothing
+  function (5-point moving average) is available to reduce noise in the drawn
+  profile. The curve auto-updates the simulation on mouse release.
+  Best for: Rapid intuitive exploration of bank reversal timing and shape.
+
+MODE 4: CSV (Data Import)
+  Space-delimited text input (time, angle per line) for pasting external data.
+  Accepts any number of waypoints; sorted automatically by time.
+  Best for: Importing bank angle schedules from external guidance tools or
+            spreadsheets. Minimum 2 valid rows required.
+
+MODE 5: APOLLO 10 (Historical Mission Replay)
+  Loads the actual bank angle command history from the Apollo 10 Command Module
+  reentry on May 26, 1969. 551 data points at 1-second intervals covering 550
+  seconds of atmospheric flight. Includes:
+    - Full initial condition set (mass, velocity, FPA, L/D, C_D, area)
+    - Entry coordinates: 174.24°E, 23.51°S (over the South Pacific)
+    - Entry velocity: 11.067 km/s (lunar return speed)
+    - Entry FPA: -6.62°
+    - Heading azimuth: 18.07° (northeast)
+    - Historical sun position for the correct lighting in the 3D visualizer
+  The altitude and velocity charts overlay actual Apollo 10 flight data (dashed
+  red lines) against the simulation output for direct validation.
+  Best for: Historical recreation, education, model validation.
+
+
+================================================================================
+  PART 4: REAL-TIME OUTPUT METRICS
+================================================================================
+
+Four summary metrics are displayed and updated after each simulation run:
+
+  MAX DECELERATION      — Peak g-load experienced during the trajectory (g)
+  PEAK HEAT FLUX        — Maximum aerodynamic heating rate (kW/m²)
+  PEAK HEAT ALTITUDE    — Altitude at which peak heating occurs (km)
+  PEAK STAGNATION TEMP  — Maximum stagnation temperature (°F)
+
+A toggleable "Peak Heat Flux Indicators" overlay adds dashed reference lines
+to all time-series charts simultaneously, marking both the time of peak heating
+(vertical orange dashed line) and the altitude of peak heating (horizontal blue
+dashed line on the altitude chart). This makes it easy to identify the thermal
+environment at the critical heating point across all charts at once.
+
+
+================================================================================
+  PART 5: REAL-TIME CHART SUITE (8 CHARTS)
+================================================================================
+
+All eight charts share a synchronized time axis, aligned pixel-for-pixel.
+Charts update instantly when any slider or bank mode changes.
+
+  1. BANK ANGLE vs TIME
+     The commanded bank angle profile over time (degrees).
+     Displays the control input driving the entire simulation.
+
+  2. ALTITUDE vs TIME
+     Vehicle altitude above sea level (km) vs. elapsed time (s).
+     In Apollo 10 mode: overlays actual flight data as a dashed red line.
+
+  3. VELOCITY vs TIME
+     Vehicle speed (km/s) vs. elapsed time (s).
+     In Apollo 10 mode: overlays actual flight data as a dashed red line.
+     The deceleration from ~11 km/s to subsonic is visible within seconds.
+
+  4. DECELERATION vs TIME
+     Instantaneous g-load (multiples of 9.81 m/s²) vs. elapsed time (s).
+     Useful for human factors and structural load analysis.
+
+  5. HEAT FLUX vs TIME
+     Aerodynamic heating rate (kW/m²) vs. elapsed time (s).
+     Useful for thermal protection system (TPS) sizing analysis.
+
+  6. FLIGHT PATH ANGLE vs TIME
+     Vehicle flight path angle (degrees) vs. elapsed time (s).
+     Reveals whether the vehicle is skipping, diving, or oscillating.
+
+  7. ALTITUDE vs DOWNRANGE
+     Altitude (km) vs. orbital-plane-referenced downrange distance (km).
+     Shows the ground footprint shape of the descent corridor.
+
+  8. ALTITUDE vs CROSSRANGE
+     Altitude (km) vs. orbital-plane-referenced crossrange distance (km).
+     Reveals lateral maneuvering capability. Lateral sweep comes from
+     bank reversals. Zero crossrange = pure downrange ballistic flight.
+
+LIVE ANIMATION DOT SYNCHRONIZATION:
+When the 3D visualization is running, a magenta dot marker moves across all
+8 charts simultaneously, locked to the current simulation time of the animation.
+This lets the user correlate what they see in 3D space with the exact values
+on every chart at that instant.
+
+
+================================================================================
+  PART 6: 3D TRAJECTORY VISUALIZATION
+================================================================================
+
+Launched via the "Launch 3-D Trajectory Visualization" button. The 3D viewer
+renders the full reentry trajectory in an immersive Three.js environment.
+
+SCENE ELEMENTS
+--------------
+  EARTH MODEL
+    A textured 3D globe at correct scale. Provides visual orientation during
+    reentry. The vehicle's lat/lon position is correctly mapped in 3D ECEF space
+    so the trajectory traces over the right part of the Earth.
+
+  STARFIELD
+    Thousands of randomly distributed stars rendered as points in a large
+    sphere around the scene. Provides spatial orientation and depth.
+
+  SUN LIGHTING
+    A directional light source simulates the sun. Position is set based on
+    simulation context:
+      - Apollo 10 mode: historically accurate position for May 26, 1969
+      - Default mode: representative daytime illumination angle
+    This affects Earth shading, vehicle illumination, and atmospheric glow.
+
+  TRAJECTORY LINE
+    The full reentry path is rendered as a 3D polyline from simulation data,
+    color-coded from red (high heat / fast) to blue (low heat / slow), matching
+    the physical heating environment along the path.
+
+  ORBITAL PLANE CIRCLE
+    A cyan dashed great-circle ring marks the orbital plane computed from the
+    initial position and velocity vectors. Helps visualize the reference frame
+    for downrange/crossrange.
+
+CAMERA MODES
+------------
+  GLOBAL MODE (G)
+    Free-orbit view of the entire Earth. The user can rotate, pan, and zoom
+    freely to observe the trajectory from any angle. Best for understanding the
+    trajectory in a planetary context.
+
+  TRAJECTORY MODE (T) — Chase Camera
+    The camera follows the vehicle along the trajectory in a cinematic chase
+    view. The camera is positioned behind and above the vehicle in its local
+    flight frame.
+      - Mouse drag left/right: pan camera yaw around the vehicle
+      - Mouse drag up/down: tilt camera pitch above/below the vehicle
+      - Scroll wheel: zoom (adjusts chase radius)
+      - Arrow keys: same yaw/pitch control via keyboard
+    Three layers of smoothing prevent jitter:
+      1. Wide-window velocity averaging (16-point window) for direction
+      2. Smoothed velocity lerp (8% per frame) for camera forward direction
+      3. Camera position lerp (12% per frame) for final position smoothing
+
+  VEHICLE LOCK (V)
+    Locks the camera in a fixed offset behind the vehicle in its local flight
+    frame. As the vehicle curves around the Earth, the camera stays behind it.
+    The vehicle's local vertical is tracked with a slow pivot (3% per frame) for
+    a cinematic horizon-leveling effect.
+
+TIME WARP
+---------
+Animation playback speed is controlled by a time warp system:
+  - Default: 1x real time
+  - Adjustable via:
+      ◀◀ / ▶▶ buttons on the main control panel
+      . and > keys: speed up
+      , and < keys: slow down
+  - Warp speed indicator shown in both the main panel and the 3D viewer
+  - Warp-synchronized dot markers update all 8 charts in real time
+
+
+================================================================================
+  PART 7: VEHICLE MODEL LIBRARY (3D VISUALIZER)
+================================================================================
+
+The 3D visualizer automatically selects a vehicle model based on the L/D ratio
+set in the simulation. Each model is a 3D .glb asset rendered with full Three.js
+materials, lighting, and physics-driven effects.
+
+  SCHOOL BUS         (L/D < 0.05)
+    A non-aerodynamic object. Tumbles freely during reentry. Features a full
+    debris ejection and disintegration system: the bus progressively breaks apart,
+    ejecting spinning debris chunks with thermal-colored vertex damage and dynamic
+    heat discoloration. Represents an uncontrolled, non-surviving reentry object.
+
+  STARDUST SRC       (L/D 0.05–0.18)
+    The Stardust Sample Return Capsule — one of the fastest Earth reentries ever
+    recorded (12.9 km/s). A very small, very blunt capsule with nearly ballistic
+    trajectory.
+
+  MERCURY CAPSULE    (L/D 0.18–0.30)
+    The early NASA Mercury capsule. Blunt heat shield, minimal lift capability.
+
+  APOLLO CM          (L/D 0.30–0.35)
+    The Apollo Command Module. The reference vehicle for the Apollo 10 historical
+    mode. Blunt heat shield with offset center-of-mass providing L/D ~0.32.
+
+  DREAM CHASER       (L/D 0.35–0.65)
+    Sierra Space's Dream Chaser lifting body. A winged vehicle with a higher
+    L/D ratio enabling runway landing capability.
+
+  X-37B              (L/D 0.65–0.75)
+    The Boeing X-37B orbital test vehicle — a small autonomous spaceplane.
+
+  SHUTTLE ORBITER    (L/D > 0.75)
+    The Space Shuttle Orbiter. Largest vehicle in the library. High L/D enables
+    significant crossrange maneuvering.
+
+PHYSICS-DRIVEN VISUAL EFFECTS ON ALL VEHICLES
+-----------------------------------------------
+  HEAT SHIELD GLOW
+    The vehicle's heat shield or belly surface glows from dark red to blinding
+    white as heat flux increases, driven by the real-time simulation heat flux
+    value. Color progresses: black → dark red → orange → yellow → white.
+
+  BOW SHOCK
+    A vehicle-specific bow shock geometry renders ahead of the vehicle. For
+    capsules, a blunt spherical shock. For lifting bodies (Dream Chaser, X-37B,
+    Shuttle), a conformal shock that follows the vehicle's underside contour.
+    The shock opacity and color respond to velocity and dynamic pressure.
+
+  PLASMA PARTICLE SYSTEM
+    Glowing plasma particles stream from the heat shield surface, driven by the
+    instantaneous heat flux value. Higher heating = denser, faster particle
+    emission. Particles are color-matched to the heat shield glow color.
+
+  SOOT PARTICLE SYSTEM
+    Dark soot particles trail behind the vehicle during high-heating phases,
+    simulating ablative material loss. Independent from plasma particles.
+
+VEHICLE VIEWER PANEL
+--------------------
+  A fixed inset panel in the lower-left corner of the 3D visualizer shows a
+  separate close-up rendering of the vehicle model with its own orbit-controls
+  camera, independent lighting, and body-axis indicators. It updates in real
+  time with the same heat shield state and orientation as the main scene.
+
+
+================================================================================
+  PART 8: FIGHTER JET HUD OVERLAY
+================================================================================
+
+A heads-up display (HUD) overlay rendered on an HTML canvas can be activated
+in the 3D visualizer. Styled after a tactical aircraft HUD, it displays:
+
+  - Instantaneous altitude (km and ft)
+  - Velocity (km/s and Mach)
+  - G-load (g's)
+  - Flight path angle (°)
+  - Bank angle (°)
+  - Latitude / Longitude
+  - Current simulation time (seconds)
+
+HEAT FLUX GAUGE
+  A circular arc gauge on the right side of the screen displays current heat
+  flux in kW/m². The needle sweeps from 0 to peak, with color changing from
+  green to yellow to red as heating intensifies.
+
+DECELERATION GAUGE
+  A second circular arc gauge below the heat flux gauge displays current g-load
+  in the same style.
+
+
+================================================================================
+  PART 9: INTERFACE & USABILITY
+================================================================================
+
+COLLAPSIBLE CONTROL PANEL
+  The left control panel can be hidden with a single button click, expanding
+  the chart area to full-width. Toggle button persists in the corner for
+  easy restore.
+
+COLLAPSIBLE HUD TELEMETRY PANEL
+  In the 3D visualizer, the top-left telemetry readout can be collapsed to
+  just the title bar, freeing screen real estate while the animation plays.
+
+RESPONSIVE DESIGN
+  The layout adapts to different screen sizes. On narrow screens, the
+  two-column layout collapses to a single column.
+
+KEYBOARD SHORTCUTS (3D Visualizer)
+  Arrow Keys       Rotate view (global mode) / adjust camera (chase mode)
+  + / - Keys       Zoom in / out
+  . or > Key       Increase time warp speed
+  , or < Key       Decrease time warp speed
+  G Key            Switch to Global Mode
+  T Key            Switch to Trajectory Mode (chase camera)
+  V Key            Toggle Vehicle Lock
+
+AUTOMATIC SIMULATION
+  The simulation runs automatically on page load and re-runs instantly whenever
+  any slider or bank mode is changed. No "Run" button is required.
+
+
+================================================================================
+  PART 10: TECHNICAL ARCHITECTURE
+================================================================================
+
+  Language:        Pure HTML + JavaScript (no build tools, no frameworks)
+  Physics engine:  Vanilla JS (no external physics library)
+  Charts:          Chart.js 4.4.0 + chartjs-plugin-annotation
+  3D rendering:    Three.js (r160) with GLTFLoader, OrbitControls
+  Vehicle assets:  GLB format 3D models loaded via Three.js GLTFLoader
+  Fonts:           Google Fonts (Orbitron, Roboto Mono)
+  Communication:   Window postMessage API (main page ↔ visualizer)
+
+The simulation and visualizer are implemented as two HTML files:
+  index.html                          — Physics engine + chart dashboard
+  reentry_trajectory_viz_integrated.html — 3D visualization environment
+
+The main page monkey-patches its own runSimulation() function to intercept
+simulation completion, convert the lat/lon trajectory to 3D ECEF coordinates,
+and stream telemetry to the visualizer window via postMessage. The visualizer
+receives the trajectory, replaces any internal nominal path, and rebuilds the
+3D scene accordingly.
+
+
+================================================================================
+  SUMMARY OF WHAT THIS SIMULATION CAN DO
+================================================================================
+
+  ✓ Simulate reentry trajectories for any blunt-body or lifting vehicle
+  ✓ Vary 7 physical parameters in real time with immediate chart response
+  ✓ Explore 5 bank angle control strategies including historical mission data
+  ✓ Replay the Apollo 10 lunar return reentry with historical accuracy
+  ✓ Compare simulated vs. actual Apollo 10 altitude and velocity profiles
+  ✓ Compute and display peak g-load, heat flux, heating altitude, and temperature
+  ✓ Generate 8 synchronized real-time engineering charts
+  ✓ Visualize the full 3D trajectory over a textured Earth globe
+  ✓ Animate the reentry with a chase camera and time warp control
+  ✓ View physics-driven vehicle models with dynamic heat shield glow,
+      bow shock, plasma particles, and (for the School Bus) disintegration
+  ✓ Display a fighter-jet HUD with live telemetry and analog gauges
+  ✓ Synchronize 3D animation time with a dot marker across all 8 charts
+  ✓ Run entirely in a web browser with no server, no installation, no login
+
+================================================================================
