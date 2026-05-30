@@ -6,6 +6,7 @@
     <title>Atmospheric Reentry Control Simulation</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Roboto+Mono:wght@300;400;500&display=swap" rel="stylesheet">
     <style>
         * {
@@ -772,7 +773,7 @@
                         letter-spacing: 1px;
                         transition: all 0.2s ease;
                     " onmouseover="this.style.background='rgba(0,217,255,0.2)'" onmouseout="this.style.background='rgba(0,217,255,0.1)'">
-                        ⬇ Export Telemetry CSV
+                        ⬇ Export Telemetry XLSX
                     </button>
                 </div>
             </div>
@@ -1162,7 +1163,7 @@
             });
         });
 
-        // ── Telemetry CSV Export ──────────────────────────────────────────────
+        // ── Telemetry XLSX Export ─────────────────────────────────────────────
         function exportTelemetry() {
             if (!charts.timeData || charts.timeData.length === 0) {
                 alert('No simulation data to export. Run a simulation first.');
@@ -1184,66 +1185,76 @@
 
             const maxDecel   = Math.max(...dec);
             const peakHeatKW = Math.max(...hf) / 1000;
+            const decelCon   = document.getElementById('decel-constraint').value.trim();
+            const heatCon    = document.getElementById('heat-constraint').value.trim();
+            const bankMode   = currentBankMode;
+            const now        = new Date().toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
 
-            const decelCon = document.getElementById('decel-constraint').value.trim();
-            const heatCon  = document.getElementById('heat-constraint').value.trim();
-
-            const bankMode = currentBankMode;
-            const constBank = parseFloat(document.getElementById('bank').value);
-
-            const now = new Date().toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
-
-            const lines = [
-                '# REENTRY SIMULATION TELEMETRY EXPORT',
-                `# Generated: ${now}`,
-                '#',
-                '# INITIAL CONDITIONS',
-                `# Vehicle Mass,${document.getElementById('mass').value},kg`,
-                `# Entry Velocity,${document.getElementById('velocity').value},km/s`,
-                `# Entry Flight Path Angle,${document.getElementById('fpa').value},deg`,
-                `# Bank Angle Mode,${bankMode}`,
-                bankMode === 'constant' ? `# Constant Bank Angle,${constBank},deg` : `# Bank Angle,time-varying (see bank_angle_deg column)`,
-                `# Lift-to-Drag Ratio (L/D),${document.getElementById('ld').value}`,
-                `# Drag Coefficient (CD),${document.getElementById('cd').value}`,
-                `# Reference Area (S),${document.getElementById('sref').value},m2`,
-                '#',
-                '# DESIGN CONSTRAINTS',
-                `# Max Deceleration,${decelCon || 'not set'},g`,
-                `# Max Heat Flux,${heatCon || 'not set'},kW/m2`,
-                '#',
-                '# SIMULATION RESULTS',
-                `# Max Deceleration,${maxDecel.toFixed(2)},g`,
-                `# Peak Heat Flux,${peakHeatKW.toFixed(1)},kW/m2`,
-                `# Simulation Duration,${t[n - 1].toFixed(1)},s`,
-                `# Data Points,${n}`,
-                '#',
-                'time_s,altitude_km,velocity_km_s,decel_g,heat_flux_kW_m2,fpa_deg,bank_angle_deg,downrange_km,crossrange_km,latitude_deg,longitude_deg'
+            // ── Sheet 1: Vehicle Data ─────────────────────────────────────────
+            const vehicleRows = [
+                ['REENTRY SIMULATION EXPORT'],
+                [`Generated: ${now}`],
+                [],
+                ['INITIAL CONDITIONS', '', ''],
+                ['Parameter', 'Value', 'Unit'],
+                ['Vehicle Mass',               +document.getElementById('mass').value,     'kg'],
+                ['Entry Velocity',             +document.getElementById('velocity').value,  'km/s'],
+                ['Entry Flight Path Angle',    +document.getElementById('fpa').value,       'deg'],
+                ['Bank Angle Mode',             bankMode,                                   ''],
+                bankMode === 'constant'
+                    ? ['Constant Bank Angle',  +document.getElementById('bank').value,      'deg']
+                    : ['Bank Angle',           'time-varying — see Time History sheet',     ''],
+                ['Lift-to-Drag Ratio (L/D)',   +document.getElementById('ld').value,        ''],
+                ['Drag Coefficient (CD)',       +document.getElementById('cd').value,        ''],
+                ['Reference Area (S)',          +document.getElementById('sref').value,      'm²'],
+                [],
+                ['DESIGN CONSTRAINTS', '', ''],
+                ['Parameter', 'Limit', 'Unit'],
+                ['Max Deceleration', decelCon ? +decelCon : 'not set', 'g'],
+                ['Max Heat Flux',    heatCon  ? +heatCon  : 'not set', 'kW/m²'],
+                [],
+                ['SIMULATION RESULTS', '', ''],
+                ['Parameter', 'Value', 'Unit'],
+                ['Max Deceleration',   +maxDecel.toFixed(4),   'g'],
+                ['Peak Heat Flux',     +peakHeatKW.toFixed(2), 'kW/m²'],
+                ['Simulation Duration',+t[n - 1].toFixed(1),   's'],
+                ['Data Points',         n,                      ''],
             ];
 
+            const ws1 = XLSX.utils.aoa_to_sheet(vehicleRows);
+            ws1['!cols'] = [{ wch: 30 }, { wch: 20 }, { wch: 10 }];
+
+            // ── Sheet 2: Time History ─────────────────────────────────────────
+            const histRows = [[
+                'time_s', 'altitude_km', 'velocity_km_s', 'decel_g',
+                'heat_flux_kW_m2', 'fpa_deg', 'bank_angle_deg',
+                'downrange_km', 'crossrange_km', 'latitude_deg', 'longitude_deg'
+            ]];
+
             for (let i = 0; i < n; i++) {
-                lines.push([
-                    t[i].toFixed(2),
-                    (alt[i] ?? 0).toFixed(3),
-                    (vel[i] ?? 0).toFixed(4),
-                    (dec[i] ?? 0).toFixed(4),
-                    ((hf[i] ?? 0) / 1000).toFixed(2),
-                    (fpa[i] ?? 0).toFixed(4),
-                    (bnk ? (bnk[i] ?? 0) : 0).toFixed(2),
-                    (dr[i] ?? 0).toFixed(3),
-                    (cr[i] ?? 0).toFixed(3),
-                    (lat && lat[i] !== undefined ? lat[i].toFixed(6) : ''),
-                    (lon && lon[i] !== undefined ? lon[i].toFixed(6) : '')
-                ].join(','));
+                histRows.push([
+                    +t[i].toFixed(2),
+                    +(alt[i] ?? 0).toFixed(3),
+                    +(vel[i] ?? 0).toFixed(4),
+                    +(dec[i] ?? 0).toFixed(4),
+                    +((hf[i] ?? 0) / 1000).toFixed(2),
+                    +(fpa[i] ?? 0).toFixed(4),
+                    +(bnk ? (bnk[i] ?? 0) : 0).toFixed(2),
+                    +(dr[i]  ?? 0).toFixed(3),
+                    +(cr[i]  ?? 0).toFixed(3),
+                    lat && lat[i] !== undefined ? +lat[i].toFixed(6) : '',
+                    lon && lon[i] !== undefined ? +lon[i].toFixed(6) : ''
+                ]);
             }
 
-            const csv  = lines.join('\n');
-            const blob = new Blob([csv], { type: 'text/csv' });
-            const url  = URL.createObjectURL(blob);
-            const a    = document.createElement('a');
-            a.href     = url;
-            a.download = `reentry_telemetry_${new Date().toISOString().slice(0,10)}.csv`;
-            a.click();
-            URL.revokeObjectURL(url);
+            const ws2 = XLSX.utils.aoa_to_sheet(histRows);
+            ws2['!cols'] = Array(11).fill({ wch: 16 });
+
+            // ── Build & download workbook ─────────────────────────────────────
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws1, 'Vehicle Data');
+            XLSX.utils.book_append_sheet(wb, ws2, 'Time History');
+            XLSX.writeFile(wb, `reentry_telemetry_${new Date().toISOString().slice(0, 10)}.xlsx`);
         }
 
         // Apollo 10 Indicator Functions
