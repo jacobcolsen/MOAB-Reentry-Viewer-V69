@@ -1104,6 +1104,17 @@
             currentBankMode = 'visual';
             document.querySelector('.bank-mode-btn[data-mode="visual"]').classList.add('active');
             document.getElementById('visualMode').style.display = 'block';
+
+            if (visualProfile.length === 0) {
+                const dur = (charts.timeData?.length > 0)
+                    ? charts.timeData[charts.timeData.length - 1]
+                    : 500;
+                const n = 6;
+                visualProfile = Array.from({ length: n }, (_, i) => ({
+                    time: (i / (n - 1)) * dur,
+                    angle: 0
+                }));
+            }
         }
 
         function computeTargetCircle(lat, lon, radiusKm) {
@@ -1181,38 +1192,76 @@
             // Bank angle chart: drag-to-edit
             const bankCanvas = document.getElementById('bankAngleChart');
             let isBankDragging = false;
-            let bankDragPoints = [];
+            let bankDragIndex  = -1;
 
             function bankChartCoords(e) {
                 const chart = charts.bankAngle;
                 if (!chart) return null;
                 const rect = bankCanvas.getBoundingClientRect();
                 const time  = chart.scales.x.getValueForPixel(e.clientX - rect.left);
-                const angle = Math.max(0, Math.min(180, chart.scales.y.getValueForPixel(e.clientY - rect.top)));
+                const angle = Math.max(-180, Math.min(180, chart.scales.y.getValueForPixel(e.clientY - rect.top)));
                 return { time, angle };
+            }
+
+            function findNearestHandle(e) {
+                if (!charts.bankAngle || currentBankMode !== 'visual') return -1;
+                const rect = bankCanvas.getBoundingClientRect();
+                const cssX = e.clientX - rect.left;
+                const cssY = e.clientY - rect.top;
+                let nearest = -1, minDist = 22;
+                visualProfile.forEach((wp, i) => {
+                    const px = charts.bankAngle.scales.x.getPixelForValue(wp.time);
+                    const py = charts.bankAngle.scales.y.getPixelForValue(wp.angle);
+                    const d  = Math.hypot(cssX - px, cssY - py);
+                    if (d < minDist) { minDist = d; nearest = i; }
+                });
+                return nearest;
+            }
+
+            function updateBankHandlesLive() {
+                const ds = charts.bankAngle?.data?.datasets[2];
+                if (!ds) return;
+                ds.data = visualProfile.map(p => ({ x: p.time, y: p.angle }));
+                charts.bankAngle.update('none');
             }
 
             bankCanvas.addEventListener('mousedown', e => {
                 if (!charts.bankAngle) return;
-                isBankDragging = true;
-                bankDragPoints = [];
                 switchToBankVisualMode();
-                const pt = bankChartCoords(e);
-                if (pt) bankDragPoints.push(pt);
+                bankDragIndex = findNearestHandle(e);
+                if (bankDragIndex === -1) {
+                    const pt = bankChartCoords(e);
+                    if (pt && pt.time >= 0) {
+                        visualProfile.push(pt);
+                        visualProfile.sort((a, b) => a.time - b.time);
+                        bankDragIndex = visualProfile.findIndex(
+                            p => p.time === pt.time && p.angle === pt.angle
+                        );
+                        updateBankHandlesLive();
+                    }
+                }
+                isBankDragging = bankDragIndex !== -1;
+                if (isBankDragging) bankCanvas.style.cursor = 'grabbing';
             });
 
             bankCanvas.addEventListener('mousemove', e => {
-                if (!isBankDragging) return;
-                const pt = bankChartCoords(e);
-                if (pt && pt.time >= 0) bankDragPoints.push(pt);
+                if (isBankDragging && bankDragIndex !== -1) {
+                    const pt = bankChartCoords(e);
+                    if (pt) {
+                        visualProfile[bankDragIndex].angle = pt.angle;
+                        updateBankHandlesLive();
+                    }
+                } else if (currentBankMode === 'visual') {
+                    bankCanvas.style.cursor = findNearestHandle(e) !== -1 ? 'grab' : 'crosshair';
+                }
             });
 
             function finishBankDrag() {
-                if (!isBankDragging || bankDragPoints.length < 2) { isBankDragging = false; return; }
+                if (!isBankDragging) return;
                 isBankDragging = false;
-                bankDragPoints.sort((a, b) => a.time - b.time);
-                visualProfile = smoothProfile(bankDragPoints, 12);
-                runSimulation();
+                bankDragIndex  = -1;
+                bankCanvas.style.cursor = 'crosshair';
+                if (visualProfile.length >= 2) runSimulation();
             }
 
             bankCanvas.addEventListener('mouseup',    finishBankDrag);
@@ -1933,29 +1982,59 @@
             // Bank Angle Chart
             if (charts.bankAngle) charts.bankAngle.destroy();
             const bankAngleDataPoints = time.map((t, i) => ({ x: t, y: bankAngle[i] }));
+            const bankHandleData = (currentBankMode === 'visual' && visualProfile.length > 0)
+                ? visualProfile.map(p => ({ x: p.time, y: p.angle }))
+                : [];
             charts.bankAngle = new Chart(document.getElementById('bankAngleChart'), {
                 type: 'line',
                 data: {
-                    datasets: [{
-                        data: bankAngleDataPoints,
-                        borderColor: '#b388ff',
-                        backgroundColor: 'rgba(179, 136, 255, 0.1)',
-                        borderWidth: 2,
-                        pointRadius: 0,
-                        tension: 0.2,
-                        fill: true
-                    }, makeDotDataset()]
+                    datasets: [
+                        {
+                            data: bankAngleDataPoints,
+                            borderColor: '#b388ff',
+                            backgroundColor: 'rgba(179, 136, 255, 0.1)',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            tension: 0.2,
+                            fill: true
+                        },
+                        makeDotDataset(),
+                        {
+                            type: 'scatter',
+                            label: '_handles',
+                            data: bankHandleData,
+                            pointRadius: 9,
+                            pointHoverRadius: 11,
+                            pointBackgroundColor: '#b388ff',
+                            pointBorderColor: '#ffffff',
+                            pointBorderWidth: 2,
+                            showLine: false,
+                            order: -1
+                        }
+                    ]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: true,
+                    layout: { ...sharedLayout },
                     plugins: {
-                        legend: { display: false }
+                        legend: { display: false },
+                        annotation: {
+                            annotations: {
+                                zeroLine: {
+                                    type: 'line', scaleID: 'y', value: 0,
+                                    borderColor: 'rgba(255,255,255,0.2)',
+                                    borderWidth: 1, borderDash: [4, 4]
+                                }
+                            }
+                        }
                     },
                     scales: {
                         x: { ...sharedXAxisConfig },
                         y: {
                             ...sharedYAxisConfig,
+                            min: -180,
+                            max: 180,
                             title: {
                                 display: true,
                                 text: 'Bank Angle (°)',
