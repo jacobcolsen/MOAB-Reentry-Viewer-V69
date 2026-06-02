@@ -1268,7 +1268,12 @@
                 if (isBankDragging && bankDragIndex !== -1) {
                     const pt = bankChartCoords(e);
                     if (pt) {
-                        visualProfile[bankDragIndex].angle = pt.angle;
+                        const xMax = charts.bankAngle?.scales?.x?.max ?? 2500;
+                        const wp   = visualProfile[bankDragIndex];
+                        wp.angle   = pt.angle;
+                        wp.time    = Math.max(0, Math.min(xMax, pt.time));
+                        visualProfile.sort((a, b) => a.time - b.time);
+                        bankDragIndex = visualProfile.indexOf(wp);
                         updateBankHandlesLive();
                     }
                 } else if (currentBankMode === 'visual') {
