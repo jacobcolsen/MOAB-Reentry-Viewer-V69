@@ -420,6 +420,8 @@
             position: relative;
         }
 
+        #bankAngleChart { cursor: crosshair; }
+
         /* Apollo 10 Indicator */
         #apollo10Indicator {
             position: fixed;
@@ -565,12 +567,10 @@
 
                             <!-- Visual Editor Mode -->
                             <div class="bank-mode-content" id="visualMode" style="display: none;">
-                                <div style="background: var(--primary-bg); border: 1px solid var(--border-color); border-radius: 4px; padding: 8px; margin-bottom: 6px;">
-                                    <canvas id="bankProfileCanvas" style="width: 100%; height: 140px; cursor: crosshair; border-radius: 4px;"></canvas>
-                                </div>
-                                <div style="display: flex; gap: 4px;">
-                                    <button id="clearCanvas" style="flex: 1; padding: 6px; background: var(--accent-orange); border: none; border-radius: 4px; color: white; font-family: 'Roboto Mono', monospace; font-size: 0.65rem; cursor: pointer;">Clear</button>
-                                    <button id="smoothCanvas" style="flex: 1; padding: 6px; background: var(--accent-blue); border: none; border-radius: 4px; color: white; font-family: 'Roboto Mono', monospace; font-size: 0.65rem; cursor: pointer;">Smooth</button>
+                                <div style="padding: 10px 8px; font-size: 0.7rem; color: var(--text-secondary); font-family: 'Roboto Mono', monospace; line-height: 1.7; background: var(--primary-bg); border: 1px solid var(--border-color); border-radius: 4px; text-align: center;">
+                                    Click &amp; drag on the<br>
+                                    <span style="color: #b388ff; font-weight: 700;">Bank Angle</span> chart<br>
+                                    to draw your profile.
                                 </div>
                             </div>
 
@@ -675,6 +675,30 @@
                             <input type="checkbox" id="peak-indicator-toggle">
                             <span class="toggle-slider"></span>
                         </label>
+                    </div>
+                </div>
+
+                <div style="margin-top: 14px; padding: 0 12px;">
+                    <div style="font-family: 'Orbitron', sans-serif; font-size: 11px; font-weight: 700; color: #ffd700; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 10px; border-bottom: 1px solid rgba(255, 215, 0, 0.3); padding-bottom: 5px;">
+                        Mission Target
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                        <label style="font-size: 0.75rem; color: var(--text-secondary); font-family: 'Roboto Mono', monospace; flex: 1; white-space: nowrap;">Target Lat</label>
+                        <input type="text" inputmode="numeric" id="target-lat" placeholder="°"
+                            style="width: 75px; background: var(--primary-bg); border: 1px solid rgba(255, 215, 0, 0.4); border-radius: 4px; padding: 6px 8px; color: #ffd700; font-family: 'Roboto Mono', monospace; font-size: 0.8rem; text-align: right;">
+                        <span style="font-size: 0.75rem; color: var(--text-secondary); font-family: 'Roboto Mono', monospace;">°N</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                        <label style="font-size: 0.75rem; color: var(--text-secondary); font-family: 'Roboto Mono', monospace; flex: 1; white-space: nowrap;">Target Lon</label>
+                        <input type="text" inputmode="numeric" id="target-lon" placeholder="°"
+                            style="width: 75px; background: var(--primary-bg); border: 1px solid rgba(255, 215, 0, 0.4); border-radius: 4px; padding: 6px 8px; color: #ffd700; font-family: 'Roboto Mono', monospace; font-size: 0.8rem; text-align: right;">
+                        <span style="font-size: 0.75rem; color: var(--text-secondary); font-family: 'Roboto Mono', monospace;">°E</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <label style="font-size: 0.75rem; color: var(--text-secondary); font-family: 'Roboto Mono', monospace; flex: 1; white-space: nowrap;">Corridor R</label>
+                        <input type="text" inputmode="numeric" id="target-radius" placeholder="km"
+                            style="width: 75px; background: var(--primary-bg); border: 1px solid rgba(255, 215, 0, 0.4); border-radius: 4px; padding: 6px 8px; color: #ffd700; font-family: 'Roboto Mono', monospace; font-size: 0.8rem; text-align: right;">
+                        <span style="font-size: 0.75rem; color: var(--text-secondary); font-family: 'Roboto Mono', monospace;">km</span>
                     </div>
                 </div>
 
@@ -811,6 +835,10 @@
                     <div class="chart-title">Altitude vs Crossrange</div>
                     <canvas id="crossrangeChart"></canvas>
                 </div>
+                <div class="chart-container">
+                    <div class="chart-title">Ground Track (Lat/Lon)</div>
+                    <canvas id="latLonChart"></canvas>
+                </div>
             </div>
         </div>
     </div>
@@ -896,12 +924,6 @@
 
         // Bank mode switching
         document.addEventListener('DOMContentLoaded', () => {
-            // Initialize canvas for visual mode
-            canvas = document.getElementById('bankProfileCanvas');
-            if (canvas) {
-                ctx = canvas.getContext('2d');
-            }
-
             // Mode button handlers
             document.querySelectorAll('.bank-mode-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
@@ -936,28 +958,6 @@
                         hideApollo10Indicator();
                     }
                     
-                    // Initialize canvas when visual mode is selected
-                    if (currentBankMode === 'visual' && canvas) {
-                        setTimeout(() => {
-                            const rect = canvas.getBoundingClientRect();
-                            canvas.width = rect.width;
-                            canvas.height = rect.height;
-                            drawGrid();
-                            
-                            // Remove old listeners to prevent duplicates
-                            canvas.removeEventListener('mousedown', startDrawing);
-                            canvas.removeEventListener('mousemove', draw);
-                            canvas.removeEventListener('mouseup', stopDrawing);
-                            canvas.removeEventListener('mouseleave', stopDrawing);
-                            
-                            // Add listeners
-                            canvas.addEventListener('mousedown', startDrawing);
-                            canvas.addEventListener('mousemove', draw);
-                            canvas.addEventListener('mouseup', stopDrawing);
-                            canvas.addEventListener('mouseleave', stopDrawing);
-                        }, 50);
-                    }
-                    
                     runSimulation();
                 });
             });
@@ -968,34 +968,6 @@
                 waypoints.push({ time: lastTime + 50, angle: 0 });
                 waypoints.sort((a, b) => a.time - b.time);
                 updateWaypointList();
-                runSimulation();
-            });
-
-            // Canvas buttons
-            document.getElementById('clearCanvas').addEventListener('click', () => {
-                visualProfile = [];
-                drawGrid();
-                runSimulation();
-            });
-
-            document.getElementById('smoothCanvas').addEventListener('click', () => {
-                if (visualProfile.length < 3) return;
-                const smoothed = [];
-                const windowSize = 5;
-                for (let i = 0; i < visualProfile.length; i++) {
-                    const start = Math.max(0, i - Math.floor(windowSize / 2));
-                    const end = Math.min(visualProfile.length, i + Math.ceil(windowSize / 2));
-                    let sumAngle = 0;
-                    for (let j = start; j < end; j++) {
-                        sumAngle += visualProfile[j].angle;
-                    }
-                    smoothed.push({
-                        time: visualProfile[i].time,
-                        angle: sumAngle / (end - start)
-                    });
-                }
-                visualProfile = smoothed;
-                drawGrid();
                 runSimulation();
             });
 
@@ -1115,6 +1087,41 @@
         }
 
         // Interpolation helper
+        function smoothProfile(points, halfWindow) {
+            return points.map((pt, i) => {
+                let sum = 0, count = 0;
+                for (let j = Math.max(0, i - halfWindow); j <= Math.min(points.length - 1, i + halfWindow); j++) {
+                    sum += points[j].angle; count++;
+                }
+                return { time: pt.time, angle: sum / count };
+            });
+        }
+
+        function switchToBankVisualMode() {
+            if (currentBankMode === 'visual') return;
+            document.querySelectorAll('.bank-mode-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.bank-mode-content').forEach(c => c.style.display = 'none');
+            currentBankMode = 'visual';
+            document.querySelector('.bank-mode-btn[data-mode="visual"]').classList.add('active');
+            document.getElementById('visualMode').style.display = 'block';
+        }
+
+        function computeTargetCircle(lat, lon, radiusKm) {
+            const dLat = radiusKm / 111.32;
+            const dLon = radiusKm / (111.32 * Math.cos(lat * Math.PI / 180));
+            return Array.from({ length: 73 }, (_, i) => {
+                const a = (i / 72) * 2 * Math.PI;
+                return { x: lon + dLon * Math.cos(a), y: lat + dLat * Math.sin(a) };
+            });
+        }
+
+        function haversineKm(lat1, lon1, lat2, lon2) {
+            const R = 6371, r = Math.PI / 180;
+            const dLat = (lat2 - lat1) * r, dLon = (lon2 - lon1) * r;
+            const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * r) * Math.cos(lat2 * r) * Math.sin(dLon / 2) ** 2;
+            return 2 * R * Math.asin(Math.sqrt(a));
+        }
+
         function interpolateWaypoints(t, points) {
             if (points.length === 0) return 0;
             if (points.length === 1) return points[0].angle;
@@ -1161,6 +1168,55 @@
                     }
                 });
             });
+
+            // Mission target inputs: re-render charts when values change
+            ['target-lat', 'target-lon', 'target-radius'].forEach(id => {
+                document.getElementById(id).addEventListener('input', () => {
+                    if (charts.timeData) {
+                        updateCharts(charts.timeData, charts.altitudeData, charts.velocityData, charts.decelData, charts.heatFluxData, charts.fpaData, charts.downrangeData, charts.crossrangeData, charts.bankAngleData);
+                    }
+                });
+            });
+
+            // Bank angle chart: drag-to-edit
+            const bankCanvas = document.getElementById('bankAngleChart');
+            let isBankDragging = false;
+            let bankDragPoints = [];
+
+            function bankChartCoords(e) {
+                const chart = charts.bankAngle;
+                if (!chart) return null;
+                const rect = bankCanvas.getBoundingClientRect();
+                const time  = chart.scales.x.getValueForPixel(e.clientX - rect.left);
+                const angle = Math.max(0, Math.min(180, chart.scales.y.getValueForPixel(e.clientY - rect.top)));
+                return { time, angle };
+            }
+
+            bankCanvas.addEventListener('mousedown', e => {
+                if (!charts.bankAngle) return;
+                isBankDragging = true;
+                bankDragPoints = [];
+                switchToBankVisualMode();
+                const pt = bankChartCoords(e);
+                if (pt) bankDragPoints.push(pt);
+            });
+
+            bankCanvas.addEventListener('mousemove', e => {
+                if (!isBankDragging) return;
+                const pt = bankChartCoords(e);
+                if (pt && pt.time >= 0) bankDragPoints.push(pt);
+            });
+
+            function finishBankDrag() {
+                if (!isBankDragging || bankDragPoints.length < 2) { isBankDragging = false; return; }
+                isBankDragging = false;
+                bankDragPoints.sort((a, b) => a.time - b.time);
+                visualProfile = smoothProfile(bankDragPoints, 12);
+                runSimulation();
+            }
+
+            bankCanvas.addEventListener('mouseup',    finishBankDrag);
+            bankCanvas.addEventListener('mouseleave', finishBankDrag);
         });
 
         // ── Telemetry XLSX Export ─────────────────────────────────────────────
@@ -2320,6 +2376,113 @@
                     }
                 }
             });
+
+            // Ground Track (Lat/Lon) Chart
+            if (charts.latLon) charts.latLon.destroy();
+
+            const latData = charts.latitudeData;
+            const lonData = charts.longitudeData;
+
+            if (latData && lonData && latData.length > 0) {
+                const tLat = parseFloat(document.getElementById('target-lat').value);
+                const tLon = parseFloat(document.getElementById('target-lon').value);
+                const tRad = parseFloat(document.getElementById('target-radius').value);
+                const hasTarget = !isNaN(tLat) && !isNaN(tLon) && !isNaN(tRad) && tRad > 0;
+
+                const trackPoints  = lonData.map((lon, i) => ({ x: lon, y: latData[i] }));
+                const landingLat   = latData[latData.length - 1];
+                const landingLon   = lonData[lonData.length - 1];
+                const distKm       = hasTarget ? haversineKm(tLat, tLon, landingLat, landingLon) : null;
+                const isInside     = hasTarget && distKm <= tRad;
+                const landingColor = hasTarget ? (isInside ? '#39ff14' : '#ff4444') : '#ff00ff';
+
+                const latLonDatasets = [
+                    {
+                        type: 'line',
+                        data: trackPoints,
+                        borderColor: '#00d9ff',
+                        backgroundColor: 'transparent',
+                        borderWidth: 1.5,
+                        pointRadius: 0,
+                        tension: 0.3,
+                        fill: false,
+                        showLine: true
+                    },
+                    {
+                        type: 'scatter',
+                        data: [{ x: landingLon, y: landingLat }],
+                        pointRadius: 8,
+                        pointBackgroundColor: landingColor,
+                        pointBorderColor: '#ffffff',
+                        pointBorderWidth: 1.5,
+                        showLine: false
+                    }
+                ];
+
+                const latLonAnnotations = {};
+                if (hasTarget) {
+                    latLonDatasets.push({
+                        type: 'line',
+                        data: computeTargetCircle(tLat, tLon, tRad),
+                        borderColor: '#ffd700',
+                        backgroundColor: 'rgba(255, 215, 0, 0.08)',
+                        borderWidth: 2,
+                        borderDash: [6, 3],
+                        pointRadius: 0,
+                        fill: true,
+                        showLine: true
+                    });
+                    latLonAnnotations.landingStatus = {
+                        type: 'label',
+                        xValue: landingLon,
+                        yValue: landingLat,
+                        yAdjust: -16,
+                        content: isInside ? '✓ INSIDE CORRIDOR' : '✗ OUTSIDE CORRIDOR',
+                        color: isInside ? '#39ff14' : '#ff4444',
+                        font: { family: 'Roboto Mono', size: 10, weight: 'bold' }
+                    };
+                }
+
+                const sharedLatLonAxis = {
+                    type: 'linear',
+                    grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                    ticks: { color: '#9aa0a6', font: { family: 'Roboto Mono', size: 11 } }
+                };
+
+                charts.latLon = new Chart(document.getElementById('latLonChart'), {
+                    type: 'scatter',
+                    data: { datasets: latLonDatasets },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        layout: { ...sharedLayout },
+                        plugins: {
+                            legend: { display: false },
+                            annotation: { annotations: latLonAnnotations }
+                        },
+                        scales: {
+                            x: {
+                                ...sharedLatLonAxis,
+                                title: {
+                                    display: true,
+                                    text: 'Longitude (°E)',
+                                    color: '#00d9ff',
+                                    font: { family: 'Orbitron', size: 12 }
+                                }
+                            },
+                            y: {
+                                ...sharedLatLonAxis,
+                                title: {
+                                    display: true,
+                                    text: 'Latitude (°N)',
+                                    color: '#00d9ff',
+                                    font: { family: 'Orbitron', size: 12 }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
         }
 
         // Run initial simulation on load
