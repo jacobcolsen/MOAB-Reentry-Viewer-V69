@@ -570,8 +570,10 @@
                                 <div style="padding: 10px 8px; font-size: 0.7rem; color: var(--text-secondary); font-family: 'Roboto Mono', monospace; line-height: 1.7; background: var(--primary-bg); border: 1px solid var(--border-color); border-radius: 4px; text-align: center;">
                                     Click &amp; drag on the<br>
                                     <span style="color: #b388ff; font-weight: 700;">Bank Angle</span> chart<br>
-                                    to draw your profile.
+                                    to draw your profile.<br>
+                                    <span style="font-size: 0.6rem; opacity: 0.6;">Double-click a node to delete it.</span>
                                 </div>
+                                <button onclick="clearBankProfile()" style="margin-top: 6px; width: 100%; padding: 5px; font-family: 'Orbitron', sans-serif; font-size: 9px; font-weight: 700; background: rgba(255,107,53,0.12); color: var(--accent-orange); border: 1px solid rgba(255,107,53,0.4); border-radius: 4px; cursor: pointer; text-transform: uppercase; letter-spacing: 1px;">Clear All Nodes</button>
                             </div>
 
                             <!-- CSV Mode -->
@@ -1107,6 +1109,19 @@
             }
         }
 
+        function clearBankProfile() {
+            const dur = (charts.timeData?.length > 0)
+                ? charts.timeData[charts.timeData.length - 1]
+                : 500;
+            const n = 6;
+            visualProfile = Array.from({ length: n }, (_, i) => ({
+                time: (i / (n - 1)) * dur,
+                angle: 0
+            }));
+            updateBankHandlesLive();
+            runSimulation();
+        }
+
         function smoothProfile(points, halfWindow) {
             return points.map((pt, i) => {
                 let sum = 0, count = 0;
@@ -1291,6 +1306,17 @@
 
             bankCanvas.addEventListener('mouseup',    finishBankDrag);
             bankCanvas.addEventListener('mouseleave', finishBankDrag);
+
+            bankCanvas.addEventListener('dblclick', e => {
+                if (currentBankMode !== 'visual' || visualProfile.length <= 2) return;
+                e.preventDefault();
+                const idx = findNearestHandle(e);
+                if (idx !== -1) {
+                    visualProfile.splice(idx, 1);
+                    updateBankHandlesLive();
+                    runSimulation();
+                }
+            });
         });
 
         // ── Telemetry XLSX Export ─────────────────────────────────────────────
