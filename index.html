@@ -501,6 +501,9 @@
             <div class="left-panel" id="left-panel">
                 <div class="controls-section">
                     <div class="controls-grid">
+                        <div style="margin-bottom: 10px; text-align: right;">
+                            <button onclick="openParamsModal()" style="padding: 4px 10px; font-family: 'Orbitron', sans-serif; font-size: 9px; font-weight: 700; color: #00d9ff; background: rgba(0,217,255,0.08); border: 1px solid rgba(0,217,255,0.35); border-radius: 4px; cursor: pointer; text-transform: uppercase; letter-spacing: 0.5px;">✎ Manual Entry</button>
+                        </div>
                         <div class="control-group">
                             <label class="control-label">Vehicle Mass</label>
                             <div class="slider-container">
@@ -900,6 +903,11 @@
         window.charts = charts; // Make accessible to telemetry bridge
         let peakHeatTime = 0;
         let bankAngleRange = 180;
+        let manualAlt     = 120;
+        let manualHeading = 35.0;
+        let manualLat     = 34.0;
+        let manualLon     = -122.5;
+        let manualMaxTime = 2500;
         let peakHeatAltitude = 0;
 
         // Bank angle mode variables
@@ -1096,6 +1104,54 @@
         }
 
         // Interpolation helper
+        function openParamsModal() {
+            document.getElementById('pm-mass').value     = document.getElementById('mass').value;
+            document.getElementById('pm-velocity').value = document.getElementById('velocity').value;
+            document.getElementById('pm-fpa').value      = document.getElementById('fpa').value;
+            document.getElementById('pm-ld').value       = document.getElementById('ld').value;
+            document.getElementById('pm-cd').value       = document.getElementById('cd').value;
+            document.getElementById('pm-sref').value     = document.getElementById('sref').value;
+            document.getElementById('pm-alt').value      = manualAlt;
+            document.getElementById('pm-heading').value  = manualHeading;
+            document.getElementById('pm-lat').value      = manualLat;
+            document.getElementById('pm-lon').value      = manualLon;
+            document.getElementById('pm-maxtime').value  = manualMaxTime;
+            document.getElementById('params-modal').style.display = 'flex';
+        }
+
+        function closeParamsModal() {
+            document.getElementById('params-modal').style.display = 'none';
+        }
+
+        function applyParams() {
+            const f = id => parseFloat(document.getElementById(id).value);
+
+            // Update slider values + display labels directly (no auto-run per slider)
+            function setSlider(sliderId, displayId, value, formatter) {
+                const sl = document.getElementById(sliderId);
+                if (!isNaN(value)) {
+                    sl.value = value;
+                    document.getElementById(displayId).textContent = formatter(value);
+                }
+            }
+
+            setSlider('mass',     'mass-value',     f('pm-mass'),     v => Math.round(v).toLocaleString() + ' kg');
+            setSlider('velocity', 'velocity-value', f('pm-velocity'), v => v.toFixed(1) + ' km/s');
+            setSlider('fpa',      'fpa-value',      f('pm-fpa'),      v => v.toFixed(1) + '°');
+            setSlider('ld',       'ld-value',       f('pm-ld'),       v => v.toFixed(2));
+            setSlider('cd',       'cd-value',       f('pm-cd'),       v => v.toFixed(1));
+            setSlider('sref',     'sref-value',     f('pm-sref'),     v => v.toFixed(0) + ' m²');
+
+            if (!isNaN(f('pm-alt')))     manualAlt     = f('pm-alt');
+            if (!isNaN(f('pm-heading'))) manualHeading = f('pm-heading');
+            if (!isNaN(f('pm-lat')))     manualLat     = f('pm-lat');
+            if (!isNaN(f('pm-lon')))     manualLon     = f('pm-lon');
+            if (!isNaN(f('pm-maxtime'))) manualMaxTime = Math.max(100, f('pm-maxtime'));
+
+            closeParamsModal();
+            runSimulation();
+        }
+
         function setBankRange(range) {
             bankAngleRange = range;
             document.getElementById('bank-range-90').style.background  =
@@ -1609,9 +1665,9 @@
                 LD = parseFloat(document.getElementById('ld').value);
                 CD = parseFloat(document.getElementById('cd').value);
                 S_ref = parseFloat(document.getElementById('sref').value);
-                psi0_deg = 35.0;  // Fixed heading angle: 35° (northeast over U.S.)
-                phi0 = 34.0 * Math.PI / 180;  // latitude: 34°N
-                theta0 = -122.5 * Math.PI / 180;  // longitude: 122.5°W
+                psi0_deg = manualHeading;
+                phi0     = manualLat * Math.PI / 180;
+                theta0   = manualLon * Math.PI / 180;
             }
 
             // Convert to radians
@@ -1619,7 +1675,7 @@
             const psi0 = psi0_deg * Math.PI / 180;  // heading angle
 
             // Initial conditions
-            const h0 = useApollo10InitialConditions ? 120.125 : 120; // km entry altitude
+            const h0 = useApollo10InitialConditions ? 120.125 : manualAlt;
             const r0 = R_EARTH + h0;
 
             // Aerodynamic coefficients
@@ -1638,7 +1694,7 @@
             
             // Simulation parameters
             const dt = 0.1; // time step (seconds)
-            const maxTime = 2500; // maximum simulation time (seconds)
+            const maxTime = useApollo10InitialConditions ? 2500 : manualMaxTime;
             
             // Storage arrays
             const time = [];
@@ -2944,5 +3000,48 @@
         })();
         /* ===== END VIS BRIDGE ===== */
     </script>
+<!-- Manual Parameter Entry Modal -->
+<div id="params-modal" style="display:none; position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,0.78); align-items:center; justify-content:center;">
+    <div style="background:#141922; border:1px solid rgba(0,217,255,0.3); border-radius:12px; padding:24px; width:380px; max-height:90vh; overflow-y:auto; box-shadow:0 0 40px rgba(0,217,255,0.15);">
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px;">
+            <span style="font-family:'Orbitron',sans-serif; font-size:13px; font-weight:700; color:#00d9ff; text-transform:uppercase; letter-spacing:1.5px;">Manual Parameters</span>
+            <button onclick="closeParamsModal()" style="background:none; border:none; color:#9aa0a6; font-size:20px; cursor:pointer; line-height:1;">×</button>
+        </div>
+
+        <!-- Vehicle Properties -->
+        <div style="font-family:'Orbitron',sans-serif; font-size:9px; color:#ff6b35; text-transform:uppercase; letter-spacing:1px; margin-bottom:10px; border-bottom:1px solid rgba(255,107,53,0.25); padding-bottom:4px;">Vehicle Properties</div>
+        <div class="pm-row"><label class="pm-lbl">Vehicle Mass</label><input type="text" inputmode="numeric" id="pm-mass" class="pm-inp"><span class="pm-unit">kg</span></div>
+        <div class="pm-row"><label class="pm-lbl">Drag Coeff (C<sub>D</sub>)</label><input type="text" inputmode="numeric" id="pm-cd" class="pm-inp"><span class="pm-unit"></span></div>
+        <div class="pm-row"><label class="pm-lbl">Lift/Drag (L/D)</label><input type="text" inputmode="numeric" id="pm-ld" class="pm-inp"><span class="pm-unit"></span></div>
+        <div class="pm-row"><label class="pm-lbl">Ref Area (S)</label><input type="text" inputmode="numeric" id="pm-sref" class="pm-inp"><span class="pm-unit">m²</span></div>
+
+        <!-- Entry Conditions -->
+        <div style="font-family:'Orbitron',sans-serif; font-size:9px; color:#00d9ff; text-transform:uppercase; letter-spacing:1px; margin:14px 0 10px; border-bottom:1px solid rgba(0,217,255,0.2); padding-bottom:4px;">Entry Conditions</div>
+        <div class="pm-row"><label class="pm-lbl">Entry Velocity</label><input type="text" inputmode="numeric" id="pm-velocity" class="pm-inp"><span class="pm-unit">km/s</span></div>
+        <div class="pm-row"><label class="pm-lbl">Flight Path Angle</label><input type="text" inputmode="numeric" id="pm-fpa" class="pm-inp"><span class="pm-unit">°</span></div>
+        <div class="pm-row"><label class="pm-lbl">Entry Altitude</label><input type="text" inputmode="numeric" id="pm-alt" class="pm-inp"><span class="pm-unit">km</span></div>
+        <div class="pm-row"><label class="pm-lbl">Entry Heading</label><input type="text" inputmode="numeric" id="pm-heading" class="pm-inp"><span class="pm-unit">°</span></div>
+        <div class="pm-row"><label class="pm-lbl">Entry Latitude</label><input type="text" inputmode="numeric" id="pm-lat" class="pm-inp"><span class="pm-unit">°N</span></div>
+        <div class="pm-row"><label class="pm-lbl">Entry Longitude</label><input type="text" inputmode="numeric" id="pm-lon" class="pm-inp"><span class="pm-unit">°E</span></div>
+
+        <!-- Simulation Settings -->
+        <div style="font-family:'Orbitron',sans-serif; font-size:9px; color:#b388ff; text-transform:uppercase; letter-spacing:1px; margin:14px 0 10px; border-bottom:1px solid rgba(179,136,255,0.2); padding-bottom:4px;">Simulation Settings</div>
+        <div class="pm-row"><label class="pm-lbl">Max Sim Time</label><input type="text" inputmode="numeric" id="pm-maxtime" class="pm-inp"><span class="pm-unit">s</span></div>
+
+        <div style="display:flex; gap:8px; margin-top:20px;">
+            <button onclick="closeParamsModal()" style="flex:1; padding:9px; font-family:'Orbitron',sans-serif; font-size:10px; font-weight:700; background:transparent; color:#9aa0a6; border:1px solid rgba(255,255,255,0.15); border-radius:6px; cursor:pointer; text-transform:uppercase;">Cancel</button>
+            <button onclick="applyParams()" style="flex:2; padding:9px; font-family:'Orbitron',sans-serif; font-size:11px; font-weight:700; background:linear-gradient(135deg,#ff6b35,#00d9ff); color:#fff; border:none; border-radius:6px; cursor:pointer; text-transform:uppercase; letter-spacing:0.5px;">Apply &amp; Run</button>
+        </div>
+    </div>
+</div>
+
+<style>
+.pm-row  { display:flex; align-items:center; margin-bottom:9px; }
+.pm-lbl  { flex:1; font-size:0.7rem; color:#9aa0a6; font-family:'Roboto Mono',monospace; }
+.pm-inp  { width:100px; background:#0a0e17; border:1px solid rgba(255,255,255,0.15); border-radius:4px; padding:6px 8px; color:#e0e0e0; font-family:'Roboto Mono',monospace; font-size:0.75rem; text-align:right; }
+.pm-unit { width:36px; font-size:0.65rem; color:#9aa0a6; font-family:'Roboto Mono',monospace; text-align:right; margin-left:6px; }
+</style>
+
 </body>
 </html>
