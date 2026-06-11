@@ -1313,12 +1313,12 @@
                 return nearest;
             }
 
-            function updateBankHandlesLive() {
+            window.updateBankHandlesLive = function() {
                 const ds = charts.bankAngle?.data?.datasets[2];
                 if (!ds) return;
                 ds.data = visualProfile.map(p => ({ x: p.time, y: p.angle }));
                 charts.bankAngle.update('none');
-            }
+            };
 
             bankCanvas.addEventListener('mousedown', e => {
                 if (!charts.bankAngle) return;

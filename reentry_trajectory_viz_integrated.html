@@ -4782,6 +4782,8 @@ function initializeVehicleViewer(containerElement, config = {}) {
             // === END INTEGRATION ADDITION ===
 
             function updateTargetZone(missionTarget) {
+                console.log('[TARGET-ZONE] updateTargetZone called:', missionTarget ?
+                    `lat=${missionTarget.lat}, lon=${missionTarget.lon}, r=${missionTarget.radius}km` : 'null (clearing)');
                 if (targetCircleLine) {
                     scene.remove(targetCircleLine);
                     targetCircleLine.geometry.dispose();
@@ -4798,7 +4800,7 @@ function initializeVehicleViewer(containerElement, config = {}) {
                 const d    = radius / EARTH_RADIUS;
                 const lat1 = lat * DEG_TO_RAD;
                 const lon1 = lon * DEG_TO_RAD;
-                const RING_R = EARTH_RADIUS + 2;
+                const RING_R = EARTH_RADIUS + 20;
 
                 const pts = [];
                 for (let i = 0; i <= 72; i++) {
@@ -4822,8 +4824,8 @@ function initializeVehicleViewer(containerElement, config = {}) {
                 );
                 scene.add(targetCircleLine);
 
-                const center = latLonToCartesian(lat, lon, EARTH_RADIUS + 2);
-                const mkGeo  = new THREE.SphereGeometry(20, 12, 12);
+                const center = latLonToCartesian(lat, lon, EARTH_RADIUS + 20);
+                const mkGeo  = new THREE.SphereGeometry(55, 16, 16);
                 const mkMat  = new THREE.MeshBasicMaterial({ color: 0xffd700 });
                 targetCenterMarker = new THREE.Mesh(mkGeo, mkMat);
                 targetCenterMarker.position.set(center.x, center.y, center.z);
