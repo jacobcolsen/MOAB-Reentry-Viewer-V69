@@ -855,6 +855,11 @@
     </div>
 
     <script>
+        function debounce(fn, ms) {
+            let t;
+            return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+        }
+
         // Update slider values and auto-run simulation
         const sliders = ['mass', 'velocity', 'fpa', 'bank', 'ld', 'cd', 'sref'];
         sliders.forEach(slider => {
@@ -1263,20 +1268,19 @@
                 updateCharts(charts.timeData, charts.altitudeData, charts.velocityData, charts.decelData, charts.heatFluxData, charts.fpaData, charts.downrangeData, charts.crossrangeData, charts.bankAngleData);
             });
 
+            const debouncedConstraint   = debounce(updateConstraintDisplay, 150);
+            const debouncedGroundTrack  = debounce(updateGroundTrackChart, 150);
+
             ['decel-constraint', 'heat-constraint'].forEach(id => {
                 document.getElementById(id).addEventListener('input', () => {
-                    if (charts.timeData) {
-                        updateCharts(charts.timeData, charts.altitudeData, charts.velocityData, charts.decelData, charts.heatFluxData, charts.fpaData, charts.downrangeData, charts.crossrangeData, charts.bankAngleData);
-                    }
+                    if (charts.decel) debouncedConstraint();
                 });
             });
 
-            // Mission target inputs: re-render charts when values change
+            // Mission target inputs: update only the ground track chart
             ['target-lat', 'target-lon', 'target-radius'].forEach(id => {
                 document.getElementById(id).addEventListener('input', () => {
-                    if (charts.timeData) {
-                        updateCharts(charts.timeData, charts.altitudeData, charts.velocityData, charts.decelData, charts.heatFluxData, charts.fpaData, charts.downrangeData, charts.crossrangeData, charts.bankAngleData);
-                    }
+                    if (charts.latLon) debouncedGroundTrack();
                 });
             });
 
@@ -1931,6 +1935,8 @@
             charts.crossrangeData = crossrange;
             charts.latitudeData = latitudeData;
             charts.longitudeData = longitudeData;
+            charts.maxDecel = maxDecel;
+            charts.maxHeat  = maxHeat / 1000;
             
             // Store orbital plane normal for visualization
             charts.orbitalPlaneNormal = {
@@ -1963,6 +1969,121 @@
             };
         }
 
+        function updateConstraintDisplay() {
+            if (!charts.decel || !charts.heat) return;
+
+            const decelConstraintVal = parseFloat(document.getElementById('decel-constraint').value) || null;
+            const heatConstraintVal  = parseFloat(document.getElementById('heat-constraint').value)  || null;
+
+            const decelAnns = charts.decel.options.plugins.annotation.annotations;
+            if (decelConstraintVal) {
+                decelAnns.decelLimit = {
+                    type: 'line', scaleID: 'y', value: decelConstraintVal,
+                    borderColor: '#ff4444', borderWidth: 2, borderDash: [8, 4],
+                    label: {
+                        content: `Limit: ${decelConstraintVal}g`, display: true,
+                        position: 'start', backgroundColor: 'rgba(255, 68, 68, 0.15)',
+                        color: '#ff4444', font: { family: 'Roboto Mono', size: 10 }
+                    }
+                };
+            } else {
+                delete decelAnns.decelLimit;
+            }
+            charts.decel.update('none');
+
+            const heatAnns = charts.heat.options.plugins.annotation.annotations;
+            if (heatConstraintVal) {
+                heatAnns.heatLimit = {
+                    type: 'line', scaleID: 'y', value: heatConstraintVal,
+                    borderColor: '#ff4444', borderWidth: 2, borderDash: [8, 4],
+                    label: {
+                        content: `Limit: ${heatConstraintVal.toLocaleString()}kW/m²`, display: true,
+                        position: 'start', backgroundColor: 'rgba(255, 68, 68, 0.15)',
+                        color: '#ff4444', font: { family: 'Roboto Mono', size: 10 }
+                    }
+                };
+            } else {
+                delete heatAnns.heatLimit;
+            }
+            charts.heat.update('none');
+
+            const decelCard = document.getElementById('max-decel').parentElement;
+            if (decelConstraintVal && charts.maxDecel > decelConstraintVal) {
+                decelCard.style.borderColor = 'rgba(255, 68, 68, 0.6)';
+                decelCard.style.boxShadow   = '0 0 8px rgba(255, 68, 68, 0.4)';
+            } else {
+                decelCard.style.borderColor = '';
+                decelCard.style.boxShadow   = '';
+            }
+
+            const heatCard = document.getElementById('peak-heat').parentElement;
+            if (heatConstraintVal && charts.maxHeat > heatConstraintVal) {
+                heatCard.style.borderColor = 'rgba(255, 68, 68, 0.6)';
+                heatCard.style.boxShadow   = '0 0 8px rgba(255, 68, 68, 0.4)';
+            } else {
+                heatCard.style.borderColor = '';
+                heatCard.style.boxShadow   = '';
+            }
+        }
+
+        function updateGroundTrackChart() {
+            if (!charts.latLon) return;
+            const latData = charts.latitudeData;
+            const lonData = charts.longitudeData;
+            if (!latData || !lonData || latData.length === 0) return;
+
+            const tLat = parseFloat(document.getElementById('target-lat').value);
+            const tLon = parseFloat(document.getElementById('target-lon').value);
+            const tRad = parseFloat(document.getElementById('target-radius').value);
+            const hasTarget = !isNaN(tLat) && !isNaN(tLon) && !isNaN(tRad) && tRad > 0;
+
+            const landingLat   = latData[latData.length - 1];
+            const landingLon   = lonData[lonData.length - 1];
+            const distKm       = hasTarget ? haversineKm(tLat, tLon, landingLat, landingLon) : null;
+            const isInside     = hasTarget && distKm <= tRad;
+            const landingColor = hasTarget ? (isInside ? '#39ff14' : '#ff4444') : '#ff00ff';
+
+            const landingDs = charts.latLon.data.datasets[1];
+            landingDs.data = [{ x: landingLon, y: landingLat }];
+            landingDs.pointBackgroundColor = landingColor;
+
+            if (hasTarget) {
+                const circleData = computeTargetCircle(tLat, tLon, tRad);
+                if (charts.latLon.data.datasets.length > 2) {
+                    charts.latLon.data.datasets[2].data = circleData;
+                } else {
+                    charts.latLon.data.datasets.push({
+                        type: 'line',
+                        data: circleData,
+                        borderColor: '#ffd700',
+                        backgroundColor: 'rgba(255, 215, 0, 0.08)',
+                        borderWidth: 2,
+                        borderDash: [6, 3],
+                        pointRadius: 0,
+                        fill: true,
+                        showLine: true
+                    });
+                }
+                charts.latLon.options.plugins.annotation.annotations.landingStatus = {
+                    type: 'label',
+                    xValue: landingLon,
+                    yValue: landingLat,
+                    yAdjust: -16,
+                    content: isInside ? '✓ INSIDE CORRIDOR' : '✗ OUTSIDE CORRIDOR',
+                    color: isInside ? '#39ff14' : '#ff4444',
+                    font: { family: 'Roboto Mono', size: 10, weight: 'bold' }
+                };
+            } else {
+                if (charts.latLon.data.datasets.length > 2) {
+                    charts.latLon.data.datasets.splice(2, 1);
+                }
+                delete charts.latLon.options.plugins.annotation.annotations.landingStatus;
+            }
+
+            charts.latLon.update('none');
+            window.sendTargetToViz?.();
+        }
+
         function updateCharts(time, altitude, velocity, deceleration, heatFlux, fpa, downrange, crossrange, bankAngle) {
             // Store in charts object for peak indicator toggle
             charts.timeData = time;
@@ -1976,26 +2097,10 @@
             charts.bankAngleData = bankAngle;
             
             const showIndicators = document.getElementById('peak-indicator-toggle').checked;
-            
-            console.log('=== UPDATE CHARTS ===');
-            console.log('peakHeatTime from global:', peakHeatTime);
-            console.log('peakHeatAltitude from global:', peakHeatAltitude);
-            console.log('showIndicators:', showIndicators);
-            
-            // Find the actual max in the heat flux data to verify
-            let actualMaxHeat = 0;
-            let actualMaxIndex = 0;
-            for (let i = 0; i < heatFlux.length; i++) {
-                if (heatFlux[i] > actualMaxHeat) {
-                    actualMaxHeat = heatFlux[i];
-                    actualMaxIndex = i;
-                }
-            }
-            console.log('Actual max heat flux:', actualMaxHeat, 'at index:', actualMaxIndex, 'time:', time[actualMaxIndex]);
-            
+
             // Get min and max time for synchronized x-axes
-            const minTime = Math.min(...time);
-            const maxTime = Math.max(...time);
+            const minTime = time[0];
+            const maxTime = time[time.length - 1];
             
             // Pre-calculate exact tick positions to force alignment
             const timeRange = maxTime - minTime;
@@ -2935,13 +3040,20 @@
                     const ldElement = document.getElementById('ld');
                     const currentLD = ldElement ? parseFloat(ldElement.value) : 0.32;
 
+                    const _tLat = parseFloat(document.getElementById('target-lat').value);
+                    const _tLon = parseFloat(document.getElementById('target-lon').value);
+                    const _tRad = parseFloat(document.getElementById('target-radius').value);
+                    const missionTarget = (!isNaN(_tLat) && !isNaN(_tLon) && !isNaN(_tRad) && _tRad > 0)
+                        ? { lat: _tLat, lon: _tLon, radius: _tRad } : null;
+
                     vizWindow.postMessage({
                         type: 'TRAJECTORY_DATA',
                         payload: telemetryBuffer,
                         orbitalPlane: window.charts?.orbitalPlaneNormal,
                         initialPosition: window.charts?.initialPosition,
                         liftToDrag: currentLD,  // Added for Vehicle Viewer
-                        isApollo10: useApollo10InitialConditions  // For historical sun position
+                        isApollo10: useApollo10InitialConditions,  // For historical sun position
+                        missionTarget
                     }, '*');
                     console.log(`[VIS-BRIDGE] ✓ SENT ${telemetryBuffer.length} telemetry points to visualization`);
                     console.log(`[VIS-BRIDGE] ✓ SENT L/D ratio: ${currentLD}`);
@@ -2954,6 +3066,17 @@
                 }
             }
             
+            // Send only the target zone to the viz without resending trajectory data
+            window.sendTargetToViz = function() {
+                if (!vizWindow || vizWindow.closed || !vizReady) return;
+                const tLat = parseFloat(document.getElementById('target-lat').value);
+                const tLon = parseFloat(document.getElementById('target-lon').value);
+                const tRad = parseFloat(document.getElementById('target-radius').value);
+                const missionTarget = (!isNaN(tLat) && !isNaN(tLon) && !isNaN(tRad) && tRad > 0)
+                    ? { lat: tLat, lon: tLon, radius: tRad } : null;
+                vizWindow.postMessage({ type: 'TARGET_UPDATE', missionTarget }, '*');
+            };
+
             // Monkey-patch runSimulation to capture telemetry after completion
             const originalRunSimulation = window.runSimulation;
             window.runSimulation = function(...args) {

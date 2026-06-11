@@ -4369,6 +4369,8 @@ function initializeVehicleViewer(containerElement, config = {}) {
             let zeroBankLine = null; // Cyan dashed line for zero-bank reference
             let orbitalPlaneLine = null; // Cyan dashed circle for orbital plane
             let markers = [];
+            let targetCircleLine   = null;
+            let targetCenterMarker = null;
             let animating = false;
             let animationProgress = 0;
             let animationMarker = null;
@@ -4478,10 +4480,13 @@ function initializeVehicleViewer(containerElement, config = {}) {
                         console.log('[VIS-BRIDGE] Scene exists, calling updateTrajectory()');
                         console.log('[VIS-BRIDGE] Rendering trajectory from injected data only');
                         updateTrajectory();
+                        updateTargetZone(event.data.missionTarget ?? null);
                     } else {
                         console.error('[VIS-BRIDGE] Scene not initialized yet!');
                     }
                     /* === END FIX === */
+                } else if (event.data && event.data.type === 'TARGET_UPDATE') {
+                    if (scene) updateTargetZone(event.data.missionTarget ?? null);
                 }
             });
             
@@ -4775,7 +4780,56 @@ function initializeVehicleViewer(containerElement, config = {}) {
                 }
             }
             // === END INTEGRATION ADDITION ===
-            
+
+            function updateTargetZone(missionTarget) {
+                if (targetCircleLine) {
+                    scene.remove(targetCircleLine);
+                    targetCircleLine.geometry.dispose();
+                    targetCircleLine.material.dispose();
+                    targetCircleLine = null;
+                }
+                if (targetCenterMarker) {
+                    scene.remove(targetCenterMarker);
+                    targetCenterMarker = null;
+                }
+                if (!missionTarget) return;
+
+                const { lat, lon, radius } = missionTarget;
+                const d    = radius / EARTH_RADIUS;
+                const lat1 = lat * DEG_TO_RAD;
+                const lon1 = lon * DEG_TO_RAD;
+                const RING_R = EARTH_RADIUS + 2;
+
+                const pts = [];
+                for (let i = 0; i <= 72; i++) {
+                    const brg  = (i / 72) * 2 * Math.PI;
+                    const lat2 = Math.asin(
+                        Math.sin(lat1) * Math.cos(d) +
+                        Math.cos(lat1) * Math.sin(d) * Math.cos(brg)
+                    );
+                    const lon2 = lon1 + Math.atan2(
+                        Math.sin(brg) * Math.sin(d) * Math.cos(lat1),
+                        Math.cos(d) - Math.sin(lat1) * Math.sin(lat2)
+                    );
+                    const p = latLonToCartesian(lat2 / DEG_TO_RAD, lon2 / DEG_TO_RAD, RING_R);
+                    pts.push(p.x, p.y, p.z);
+                }
+
+                const geo = new THREE.BufferGeometry();
+                geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+                targetCircleLine = new THREE.Line(geo,
+                    new THREE.LineBasicMaterial({ color: 0xffd700, linewidth: 2 })
+                );
+                scene.add(targetCircleLine);
+
+                const center = latLonToCartesian(lat, lon, EARTH_RADIUS + 2);
+                const mkGeo  = new THREE.SphereGeometry(20, 12, 12);
+                const mkMat  = new THREE.MeshBasicMaterial({ color: 0xffd700 });
+                targetCenterMarker = new THREE.Mesh(mkGeo, mkMat);
+                targetCenterMarker.position.set(center.x, center.y, center.z);
+                scene.add(targetCenterMarker);
+            }
+
             // Scene setup
             const scene = new THREE.Scene();
             const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200000);
