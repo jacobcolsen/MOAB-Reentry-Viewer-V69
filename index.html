@@ -2874,6 +2874,13 @@
                     const label = document.getElementById('warp-speed-label');
                     if (label) label.textContent = `x${event.data.speed}`;
                 }
+
+                if (event.data && event.data.type === 'TARGET_PLACED') {
+                    document.getElementById('target-lat').value    = event.data.lat.toFixed(4);
+                    document.getElementById('target-lon').value    = event.data.lon.toFixed(4);
+                    document.getElementById('target-radius').value = Math.round(event.data.radius);
+                    updateGroundTrackChart();
+                }
             });
             /* === END FIX === */
             

@@ -270,6 +270,7 @@
         <button id="mode-global" class="active">🌍 Global Mode (G)</button>
         <button id="mode-trajectory">🛸 Trajectory Mode (T)</button>
         <button id="vehicle-lock-btn">🔒 Vehicle Lock (V)</button>
+        <button id="place-target-btn">📍 Place Target</button>
     </div>
 
     <!-- Fighter-Jet HUD Overlay - Top Right Corner -->
@@ -4369,8 +4370,12 @@ function initializeVehicleViewer(containerElement, config = {}) {
             let zeroBankLine = null; // Cyan dashed line for zero-bank reference
             let orbitalPlaneLine = null; // Cyan dashed circle for orbital plane
             let markers = [];
-            let targetCircleLine   = null;
-            let targetCenterMarker = null;
+            let targetCircleLine      = null;
+            let targetCenterMarker    = null;
+            let targetRadiusDragHandle = null;
+            let currentMissionTarget  = null;
+            let isTargetPlacementMode = false;
+            let isDraggingRadius      = false;
             let animating = false;
             let animationProgress = 0;
             let animationMarker = null;
@@ -4781,6 +4786,22 @@ function initializeVehicleViewer(containerElement, config = {}) {
             }
             // === END INTEGRATION ADDITION ===
 
+            function cartesianToLatLon(x, y, z) {
+                const r   = Math.sqrt(x*x + y*y + z*z);
+                const lat = Math.asin(z / r) * 180 / Math.PI;
+                const lon = Math.atan2(y, x) * 180 / Math.PI;
+                return { lat, lon };
+            }
+
+            function haversineKm(lat1, lon1, lat2, lon2) {
+                const R    = 6371;
+                const dLat = (lat2 - lat1) * Math.PI / 180;
+                const dLon = (lon2 - lon1) * Math.PI / 180;
+                const a    = Math.sin(dLat/2)**2 +
+                             Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2)**2;
+                return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            }
+
             function updateTargetZone(missionTarget) {
                 console.log('[TARGET-ZONE] updateTargetZone called:', missionTarget ?
                     `lat=${missionTarget.lat}, lon=${missionTarget.lon}, r=${missionTarget.radius}km` : 'null (clearing)');
@@ -4794,6 +4815,11 @@ function initializeVehicleViewer(containerElement, config = {}) {
                     scene.remove(targetCenterMarker);
                     targetCenterMarker = null;
                 }
+                if (targetRadiusDragHandle) {
+                    scene.remove(targetRadiusDragHandle);
+                    targetRadiusDragHandle = null;
+                }
+                currentMissionTarget = missionTarget;
                 if (!missionTarget) return;
 
                 const { lat, lon, radius } = missionTarget;
@@ -4830,6 +4856,23 @@ function initializeVehicleViewer(containerElement, config = {}) {
                 targetCenterMarker = new THREE.Mesh(mkGeo, mkMat);
                 targetCenterMarker.position.set(center.x, center.y, center.z);
                 scene.add(targetCenterMarker);
+
+                // White drag handle at bearing=90° (east) on ring edge
+                const brgHandle = Math.PI / 2;
+                const lat2h = Math.asin(
+                    Math.sin(lat1) * Math.cos(d) +
+                    Math.cos(lat1) * Math.sin(d) * Math.cos(brgHandle)
+                );
+                const lon2h = lon1 + Math.atan2(
+                    Math.sin(brgHandle) * Math.sin(d) * Math.cos(lat1),
+                    Math.cos(d) - Math.sin(lat1) * Math.sin(lat2h)
+                );
+                const handlePos = latLonToCartesian(lat2h / DEG_TO_RAD, lon2h / DEG_TO_RAD, EARTH_RADIUS + 20);
+                const hGeo = new THREE.SphereGeometry(75, 16, 16);
+                const hMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+                targetRadiusDragHandle = new THREE.Mesh(hGeo, hMat);
+                targetRadiusDragHandle.position.set(handlePos.x, handlePos.y, handlePos.z);
+                scene.add(targetRadiusDragHandle);
             }
 
             // Scene setup
@@ -6007,38 +6050,108 @@ function initializeVehicleViewer(containerElement, config = {}) {
             /* === END FIX === */
 
             // Mouse controls
-            let isDragging = false;
+            const raycaster = new THREE.Raycaster();
+            const mouse     = new THREE.Vector2();
+            let isDragging  = false;
+            let mouseMoved  = false;
             let previousMousePosition = { x: 0, y: 0 };
 
+            function getMouseNDC(e) {
+                const rect = renderer.domElement.getBoundingClientRect();
+                mouse.x = ((e.clientX - rect.left) / rect.width)  * 2 - 1;
+                mouse.y = -((e.clientY - rect.top)  / rect.height) * 2 + 1;
+            }
+
             renderer.domElement.addEventListener('mousedown', (e) => {
-                isDragging = true;
+                mouseMoved = false;
                 previousMousePosition = { x: e.clientX, y: e.clientY };
+
+                if (isTargetPlacementMode && targetRadiusDragHandle) {
+                    getMouseNDC(e);
+                    raycaster.setFromCamera(mouse, camera);
+                    const hits = raycaster.intersectObject(targetRadiusDragHandle);
+                    if (hits.length > 0) {
+                        isDraggingRadius = true;
+                        renderer.domElement.style.cursor = 'ew-resize';
+                        return; // skip orbit
+                    }
+                }
+
+                isDragging = true;
             });
 
             renderer.domElement.addEventListener('mousemove', (e) => {
-                if (isDragging) {
-                    const deltaX = e.clientX - previousMousePosition.x;
-                    const deltaY = e.clientY - previousMousePosition.y;
-                    
-                    if (cameraState.mode === 'trajectory' && cameraState.horizonLocked) {
-                        // Rotate in local frame so drag axes match what the user sees on screen
-                        orbitLocalFrame(deltaX * cameraState.rotationSpeed, deltaY * cameraState.rotationSpeed);
-                    } else {
-                        // Global mode: standard spherical yaw/pitch
-                        cameraState.yaw -= deltaX * cameraState.rotationSpeed;
-                        cameraState.pitch += deltaY * cameraState.rotationSpeed;
-                        cameraState.pitch = Math.max(cameraState.minPitch,
-                                                      Math.min(cameraState.maxPitch, cameraState.pitch));
-                    }
+                const dx = e.clientX - previousMousePosition.x;
+                const dy = e.clientY - previousMousePosition.y;
+                if (Math.abs(dx) > 2 || Math.abs(dy) > 2) mouseMoved = true;
 
+                if (isDraggingRadius && currentMissionTarget) {
+                    getMouseNDC(e);
+                    raycaster.setFromCamera(mouse, camera);
+                    const hits = raycaster.intersectObject(earth);
+                    if (hits.length > 0) {
+                        const p = cartesianToLatLon(hits[0].point.x, hits[0].point.y, hits[0].point.z);
+                        const newRadius = haversineKm(
+                            currentMissionTarget.lat, currentMissionTarget.lon, p.lat, p.lon
+                        );
+                        if (newRadius > 10) {
+                            updateTargetZone({
+                                lat: currentMissionTarget.lat,
+                                lon: currentMissionTarget.lon,
+                                radius: newRadius
+                            });
+                        }
+                    }
+                    return;
+                }
+
+                if (isDragging) {
+                    if (cameraState.mode === 'trajectory' && cameraState.horizonLocked) {
+                        orbitLocalFrame(dx * cameraState.rotationSpeed, dy * cameraState.rotationSpeed);
+                    } else {
+                        cameraState.yaw   -= dx * cameraState.rotationSpeed;
+                        cameraState.pitch += dy * cameraState.rotationSpeed;
+                        cameraState.pitch  = Math.max(cameraState.minPitch,
+                                                       Math.min(cameraState.maxPitch, cameraState.pitch));
+                    }
                     updateCameraFromSpherical();
-                    
                     previousMousePosition = { x: e.clientX, y: e.clientY };
                 }
             });
 
-            renderer.domElement.addEventListener('mouseup', () => {
+            renderer.domElement.addEventListener('mouseup', (e) => {
+                // Finalize radius drag
+                if (isDraggingRadius && currentMissionTarget) {
+                    isDraggingRadius = false;
+                    renderer.domElement.style.cursor = 'crosshair';
+                    window.opener?.postMessage({
+                        type: 'TARGET_PLACED',
+                        lat: currentMissionTarget.lat,
+                        lon: currentMissionTarget.lon,
+                        radius: currentMissionTarget.radius
+                    }, '*');
+                    return;
+                }
+
                 isDragging = false;
+
+                // Place target on click (no drag) in placement mode
+                if (isTargetPlacementMode && !mouseMoved) {
+                    getMouseNDC(e);
+                    raycaster.setFromCamera(mouse, camera);
+                    const hits = raycaster.intersectObject(earth);
+                    if (hits.length > 0) {
+                        const p = cartesianToLatLon(hits[0].point.x, hits[0].point.y, hits[0].point.z);
+                        const radius = currentMissionTarget ? currentMissionTarget.radius : 500;
+                        updateTargetZone({ lat: p.lat, lon: p.lon, radius });
+                        window.opener?.postMessage({
+                            type: 'TARGET_PLACED',
+                            lat: p.lat,
+                            lon: p.lon,
+                            radius
+                        }, '*');
+                    }
+                }
             });
 
             renderer.domElement.addEventListener('wheel', (e) => {
@@ -6426,10 +6539,16 @@ function initializeVehicleViewer(containerElement, config = {}) {
                     cameraState.vehicleLocked = !cameraState.vehicleLocked;
                     this.classList.toggle('active');
                     console.log(`Vehicle lock: ${cameraState.vehicleLocked ? 'ON' : 'OFF'}`);
-                    
+
                     // Hide pivot indicator when locked, show when unlocked
                     pivotIndicator.visible = !cameraState.vehicleLocked;
                 }
+            });
+
+            document.getElementById('place-target-btn').addEventListener('click', function() {
+                isTargetPlacementMode = !isTargetPlacementMode;
+                this.classList.toggle('active', isTargetPlacementMode);
+                renderer.domElement.style.cursor = isTargetPlacementMode ? 'crosshair' : 'default';
             });
 
             // === TIME WARP SYSTEM ===
