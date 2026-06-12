@@ -270,7 +270,6 @@
         <button id="mode-global" class="active">🌍 Global Mode (G)</button>
         <button id="mode-trajectory">🛸 Trajectory Mode (T)</button>
         <button id="vehicle-lock-btn">🔒 Vehicle Lock (V)</button>
-        <button id="place-target-btn">📍 Place Target</button>
     </div>
 
     <!-- Fighter-Jet HUD Overlay - Top Right Corner -->
@@ -4787,10 +4786,13 @@ function initializeVehicleViewer(containerElement, config = {}) {
             // === END INTEGRATION ADDITION ===
 
             function cartesianToLatLon(x, y, z) {
-                const r   = Math.sqrt(x*x + y*y + z*z);
-                const lat = Math.asin(z / r) * 180 / Math.PI;
-                const lon = Math.atan2(y, x) * 180 / Math.PI;
-                return { lat, lon };
+                const r     = Math.sqrt(x*x + y*y + z*z);
+                const phi   = Math.acos(y / r);       // y = r·cos(phi) → phi = acos(y/r)
+                const theta = Math.atan2(z, -x);      // atan2(sin θ, cos θ) where x = -r·sinφ·cosθ
+                return {
+                    lat: 90 - phi * 180 / Math.PI,    // phi = (90-lat)·DEG → lat = 90 - phi·RAD
+                    lon: theta * 180 / Math.PI - 180  // theta = (lon+180)·DEG → lon = theta·RAD - 180
+                };
             }
 
             function haversineKm(lat1, lon1, lat2, lon2) {
@@ -4872,6 +4874,7 @@ function initializeVehicleViewer(containerElement, config = {}) {
                 const hMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
                 targetRadiusDragHandle = new THREE.Mesh(hGeo, hMat);
                 targetRadiusDragHandle.position.set(handlePos.x, handlePos.y, handlePos.z);
+                targetRadiusDragHandle.visible = isTargetPlacementMode;
                 scene.add(targetRadiusDragHandle);
             }
 
@@ -6434,6 +6437,13 @@ function initializeVehicleViewer(containerElement, config = {}) {
                         // Toggle play/pause (same as clicking the Play button)
                         document.getElementById('play-btn').click();
                         break;
+                    case 'p':
+                    case 'P':
+                        e.preventDefault();
+                        isTargetPlacementMode = !isTargetPlacementMode;
+                        renderer.domElement.style.cursor = isTargetPlacementMode ? 'crosshair' : 'default';
+                        if (targetRadiusDragHandle) targetRadiusDragHandle.visible = isTargetPlacementMode;
+                        break;
                 }
             });
 
@@ -6545,11 +6555,6 @@ function initializeVehicleViewer(containerElement, config = {}) {
                 }
             });
 
-            document.getElementById('place-target-btn').addEventListener('click', function() {
-                isTargetPlacementMode = !isTargetPlacementMode;
-                this.classList.toggle('active', isTargetPlacementMode);
-                renderer.domElement.style.cursor = isTargetPlacementMode ? 'crosshair' : 'default';
-            });
 
             // === TIME WARP SYSTEM ===
             // Extended warp levels: 1×, 2×, 5×, 10×, 25×, 50×, 75×, 100×, 150×

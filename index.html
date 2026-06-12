@@ -2906,7 +2906,7 @@
                     btn.onclick = () => {
                         /* === FIX: VIS TRAJECTORY STREAMING === */
                         vizReady = false; // Reset ready flag when opening new window
-                        vizWindow = window.open('reentry_trajectory_viz_integrated.html', '_blank');
+                        vizWindow = window.open('reentry_trajectory_viz_integrated.html', '_blank', 'popup,width=1400,height=900,resizable=yes');
                         console.log('[VIS-BRIDGE] Opened visualization window, waiting for vizReady handshake');
                         /* === END FIX === */
                     };
