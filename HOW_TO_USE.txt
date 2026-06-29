@@ -1,0 +1,351 @@
+================================================================================
+  MOAB REENTRY VIEWER — HOW TO USE
+================================================================================
+
+This tool simulates an object re-entering Earth's atmosphere and shows you
+what happens to it in real time — altitude, speed, g-forces, heating, and
+where it lands. There are two parts:
+
+  1. The MAIN SIM   — where you set parameters and read charts (index.html)
+  2. The 3D VIEWER  — a live 3D animation of the reentry on a globe
+
+Open index.html in Chrome to get started.
+
+--------------------------------------------------------------------------------
+  QUICK START
+--------------------------------------------------------------------------------
+
+1. Open index.html in Chrome.
+2. Move any slider — the charts update instantly.
+3. Click "Launch 3-D Trajectory Visualization" to open the 3D globe window.
+4. Press Play in the 3D window to watch the reentry unfold.
+
+That's it. Everything else below is just detail on what each control does.
+
+
+================================================================================
+  PART 1 — THE MAIN SIM (index.html)
+================================================================================
+
+The left panel has all your inputs. The right side has all the output charts.
+
+--------------------------------------------------------------------------------
+  VEHICLE SLIDERS
+--------------------------------------------------------------------------------
+
+These three sliders control what your vehicle looks like and how it enters.
+Every change instantly re-runs the simulation.
+
+  Vehicle Mass (2,000 – 10,000 kg)
+    How heavy the vehicle is. Heavier vehicles decelerate more slowly and
+    tend to arrive lower in the atmosphere with more remaining speed.
+
+  Entry Velocity (7 – 12 km/s)
+    How fast the vehicle is going at the top of the atmosphere (~120 km).
+    7.9 km/s is low Earth orbit speed. Values above ~11 km/s represent
+    a vehicle coming back from the Moon. This is the single biggest driver
+    of how hot and violent the reentry is.
+
+  Flight Path Angle (-20° to +5°)
+    The angle at which the vehicle enters, measured below horizontal.
+    Shallower (near 0°) = gentler entry but risks skipping back out to space.
+    Steeper (toward -20°) = more g-forces and much more heat.
+
+--------------------------------------------------------------------------------
+  AERODYNAMICS SLIDERS
+--------------------------------------------------------------------------------
+
+These control the shape and aerodynamic behavior of the vehicle.
+
+  L/D — Lift-to-Drag Ratio (0 to 1)
+    How much lift the vehicle generates relative to its drag.
+    0 = a pure ballistic object (like a cannonball).
+    0.3 = typical Apollo-style capsule.
+    1 = a gliding vehicle like the Space Shuttle.
+    Higher L/D = more cross-range control and a gentler landing approach.
+
+  CD — Drag Coefficient (0.5 to 2.5)
+    How "draggy" the vehicle's shape is.
+    A blunt capsule is around 1.3. A sleeker shape is lower.
+    Higher = more drag = slower descent.
+
+  Reference Area (5 – 50 m²)
+    The cross-sectional area of the vehicle that faces the airflow.
+    Think of it as how big the vehicle's "face" is going in.
+    Apollo CM was about 12 m².
+
+--------------------------------------------------------------------------------
+  BANK ANGLE — 5 MODES
+--------------------------------------------------------------------------------
+
+Bank angle is how the vehicle rolls during reentry. It steers the lift
+vector left, right, up, or down, and is the primary way pilots control
+where a capsule or glider lands.
+
+Click one of the five tab buttons to choose a mode:
+
+  CONSTANT
+    A single slider (0°–180°). The vehicle holds that exact bank angle for
+    the whole flight. 0° = lift pointing straight up (maximum upward lift).
+    90° = lift pointing sideways (maximum turning). 180° = lift pointing
+    down (pushes vehicle into the atmosphere harder).
+
+  PIECEWISE (Waypoints)
+    Define a timeline of bank angles. Each row has a TIME (in seconds) and
+    an ANGLE. The simulation smoothly interpolates between them.
+    - Click "+ Add Waypoint" to add a new time/angle pair.
+    - Click the red X on any row to delete it (minimum 2 rows required).
+    - "Clear All Nodes" resets everything to a flat zero-degree profile.
+
+  VISUAL (Drag-to-Draw)
+    Click and drag the dots directly on the Bank Angle chart to reshape the
+    bank profile by hand. Double-click a dot to delete it.
+    "Clear All Nodes" resets to a flat line.
+
+  CSV (Paste Data)
+    Paste time/angle pairs into the text box, one pair per line, separated
+    by a space. Example:
+        0 0
+        100 60
+        200 45
+        500 0
+    Then click "Apply CSV Data" to load it.
+
+  APOLLO 10
+    Loads the actual bank angle profile flown by the Apollo 10 Command
+    Module on May 26, 1969. Also automatically sets the vehicle mass,
+    velocity, flight path angle, and aerodynamics to Apollo 10 values.
+    A banner in the top-right corner confirms "APOLLO 10 MODE ACTIVE."
+    The Altitude and Velocity charts will overlay real Apollo 10 flight
+    data in gold dashed lines for comparison.
+    Note: Moving any other slider will exit Apollo 10 mode.
+
+--------------------------------------------------------------------------------
+  MANUAL ENTRY (✎ button)
+--------------------------------------------------------------------------------
+
+Click "✎ Manual Entry" at the top of the left panel to open a dialog where
+you can type exact numbers for every parameter at once. This is useful when
+you want precision beyond what the sliders allow, or want to set entry
+conditions not available on the main panel:
+
+  Vehicle Properties:   Mass, CD (drag), L/D (lift), Reference Area
+  Entry Conditions:     Velocity, Flight Path Angle, Entry Altitude,
+                        Entry Heading (compass), Entry Latitude, Entry Longitude
+  Simulation Settings:  Max Sim Time (how long the simulation runs in seconds)
+
+Click "Apply & Run" to apply all values and re-run the simulation.
+Click "Cancel" to close without changing anything.
+
+--------------------------------------------------------------------------------
+  DISPLAY OPTIONS
+--------------------------------------------------------------------------------
+
+  Show Peak Heat Flux Indicators (toggle switch)
+    When turned on, two dashed lines appear on the charts:
+    - An orange vertical line marks the moment of peak heating.
+    - A blue horizontal line on the Altitude chart marks the altitude where
+      that peak heating occurred.
+
+--------------------------------------------------------------------------------
+  MISSION TARGET (Landing Zone)
+--------------------------------------------------------------------------------
+
+These three fields let you define a target landing zone on the ground.
+Once set, a gold circle appears on the Ground Track chart.
+
+  Target Lat    Latitude of the target center (decimal degrees)
+  Target Lon    Longitude of the target center (decimal degrees)
+  Corridor R    Radius of the landing zone circle (km)
+
+After the simulation runs, the Ground Track chart will label the final
+landing point as either "INSIDE CORRIDOR" (green) or "OUTSIDE CORRIDOR"
+(red) based on whether it falls within that radius.
+
+You can also set the target by clicking directly on the globe in the
+3D Viewer (see the P key under Part 2).
+
+--------------------------------------------------------------------------------
+  DESIGN CONSTRAINTS
+--------------------------------------------------------------------------------
+
+These two fields draw red limit lines on the relevant charts and turn the
+summary metric cards red if the simulation exceeds your limits.
+
+  Max Decel     Maximum allowed deceleration, in g's.
+                Draws a red dashed line on the Deceleration chart.
+
+  Max Heat Flux Maximum allowed heating rate, in kW/m².
+                Draws a red dashed line on the Heat Flux chart.
+
+Leave either field blank (or type "off") to disable that constraint.
+
+--------------------------------------------------------------------------------
+  TOOLBAR BUTTONS
+--------------------------------------------------------------------------------
+
+These appear below the left panel.
+
+  🚀 Launch 3-D Trajectory Visualization
+    Opens the 3D globe viewer in a new window. Run a simulation first.
+    The trajectory data streams automatically to the 3D window.
+
+  ◀◀  and  ▶▶
+    Slow down or speed up the animated playback dot that moves across
+    all the charts in sync with the 3D animation.
+
+  ⬇ Export Telemetry XLSX
+    Downloads a full Excel workbook with two sheets:
+    - Vehicle Data: your inputs and peak summary results
+    - Time History: complete second-by-second data (altitude, velocity,
+      deceleration, heat flux, flight path angle, bank angle, lat/lon,
+      downrange, crossrange)
+
+--------------------------------------------------------------------------------
+  CHARTS (right side, scrollable)
+--------------------------------------------------------------------------------
+
+Nine charts update every time you move a slider. You can scroll down to
+see them all. A moving dot (magenta) tracks the 3D animation across
+every chart in real time.
+
+  1. Bank Angle vs Time      Your commanded bank angle over the flight
+  2. Altitude vs Time        How high the vehicle is (km)
+  3. Velocity vs Time        How fast it's going (km/s)
+  4. Deceleration vs Time    G-forces experienced
+  5. Heat Flux vs Time       Heating rate on the heat shield (kW/m²)
+  6. Flight Path Angle vs Time  Entry angle changing over time
+  7. Altitude vs Downrange   How far ahead the vehicle gets as it descends
+  8. Altitude vs Crossrange  How far sideways it drifts as it descends
+  9. Ground Track (Lat/Lon)  Map view of the trajectory path and landing point
+
+The Bank Angle chart has two small buttons in its title bar:
+  ±90  — shows the Y axis from -90° to +90°
+  ±180 — shows the Y axis from -180° to +180° (default)
+
+The summary cards at the bottom of the left panel show:
+  Max Deceleration   Peak heat flux altitude   Peak g-load   Peak stagnation temp
+
+
+================================================================================
+  PART 2 — THE 3D REENTRY VISUALIZER
+================================================================================
+
+Click "Launch 3-D Trajectory Visualization" in the main sim to open this
+window. It shows your vehicle flying through the atmosphere on an interactive
+3D Earth.
+
+--------------------------------------------------------------------------------
+  BUTTONS (top bar)
+--------------------------------------------------------------------------------
+
+  ▶ Play Animation / ⏸ Pause
+    Starts or pauses the animation. The vehicle (shown as a 3D model) travels
+    along the trajectory. The HUD, gauges, and chart dots all update live.
+
+  🌍 Global Mode  (keyboard: G)
+    Free-orbit view. You can spin the Earth, zoom in and out, see the full
+    trajectory arc from any angle. Best for an overview of the flight path.
+
+  🛸 Trajectory Mode  (keyboard: T)
+    The camera rides along with the vehicle. Good for a "ride along" view.
+    Automatically enables Vehicle Lock when you switch to this mode.
+
+  🔒 Vehicle Lock  (keyboard: V)
+    Only available in Trajectory Mode. Keeps the camera locked just behind
+    the vehicle in a chase-camera view. Press V again to unlock and orbit
+    freely around the vehicle's current position.
+
+--------------------------------------------------------------------------------
+  MOUSE CONTROLS
+--------------------------------------------------------------------------------
+
+  Click + Drag          Rotate the view / orbit the Earth
+  Scroll Wheel          Zoom in and out
+  Shift + Scroll        Move the camera pivot point along the trajectory
+                        (useful in Trajectory Mode to look ahead or behind)
+
+--------------------------------------------------------------------------------
+  KEYBOARD SHORTCUTS
+--------------------------------------------------------------------------------
+
+  Spacebar         Play or pause the animation
+  G                Switch to Global Mode
+  T                Switch to Trajectory Mode (also enables Vehicle Lock)
+  V                Toggle Vehicle Lock on/off (Trajectory Mode only)
+  H                Toggle Horizon Lock (Trajectory Mode only)
+                   Keeps the horizon level in the chase camera view
+  Arrow Keys       Rotate the camera (pan around the view)
+  + or =           Zoom in
+  - or _           Zoom out
+  . or >           Speed up time warp (animation plays faster)
+  , or <           Slow down time warp (animation plays slower)
+  [ (left bracket) Jump camera pivot backward 10 steps along the trajectory
+  ] (right bracket) Jump camera pivot forward 10 steps along the trajectory
+  P                Toggle Target Placement Mode (see below)
+
+--------------------------------------------------------------------------------
+  PLACING A LANDING TARGET IN THE 3D VIEWER
+--------------------------------------------------------------------------------
+
+Press P (or use the P key shown in the CONTROLS panel) to enter Target
+Placement Mode. The cursor changes to a crosshair.
+
+  - Click anywhere on the Earth's surface to drop the landing zone center
+    at that lat/lon.
+  - A gold circle and dot will appear showing the target zone.
+  - Drag the white handle on the ring edge to resize the radius.
+
+The latitude, longitude, and radius automatically update in the main sim's
+Target Lat / Target Lon / Corridor R fields. Press P again to exit
+placement mode.
+
+--------------------------------------------------------------------------------
+  ON-SCREEN DISPLAYS (3D VIEWER)
+--------------------------------------------------------------------------------
+
+  HUD (top-right corner)
+    A fighter-jet-style display showing live telemetry as the animation plays:
+    Altitude, Velocity, Mach number, G-load, Flight Path Angle, Bank Angle,
+    Latitude, Longitude, and current time in seconds.
+
+  Heat Flux Gauge (right side, below HUD)
+    An arc meter showing current heating rate (kW/m²). The needle tracks
+    the current value. A lighter "peak needle" holds the maximum recorded
+    during this animation run.
+
+  Deceleration Gauge (right side, below Heat Flux)
+    Same style as the Heat Flux gauge. Shows current and peak g-forces.
+
+  Time Warp Indicator (top-left corner)
+    Shows the current animation speed multiplier, e.g., "x10" or "x100".
+
+  Vehicle Viewer Pane (bottom-left corner)
+    A close-up 3D view of the vehicle model, showing its orientation and
+    heat shield state. The model automatically matches your L/D setting
+    (e.g., Apollo capsule, Space Shuttle, X-37B, etc.)
+
+  CONTROLS Panel (top-left)
+    A collapsible reference list of all keyboard shortcuts.
+    Click the "CONTROLS" title bar to expand or collapse it.
+
+
+================================================================================
+  TIPS
+================================================================================
+
+- The simulation runs automatically every time you move a slider. You don't
+  need to click a "Run" button.
+
+- Apollo 10 mode is a great reference point. Load it, look at the charts,
+  then tweak sliders to see how small changes would have changed the outcome.
+
+- If the vehicle "skips out" (never lands), try making the flight path angle
+  a little steeper (more negative).
+
+- Use the 3D viewer's Trajectory Mode + Vehicle Lock for the best sense of
+  what it would feel like to be on board during reentry.
+
+- Export to XLSX if you want to do your own analysis in Excel or another tool.
+
+================================================================================
