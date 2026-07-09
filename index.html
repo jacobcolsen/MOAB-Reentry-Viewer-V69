@@ -861,6 +861,7 @@
         }
 
         // Update slider values and auto-run simulation
+        const debouncedRunSimulation = debounce(() => runSimulation(), 120);
         const sliders = ['mass', 'velocity', 'fpa', 'bank', 'ld', 'cd', 'sref'];
         sliders.forEach(slider => {
             const input = document.getElementById(slider);
@@ -898,8 +899,9 @@
                 useApollo10InitialConditions = false;
                 hideApollo10Indicator();
                 
-                // Auto-run simulation when slider changes
-                runSimulation();
+                // Auto-run simulation when slider changes (debounced so rapid drags don't
+                // re-run the full RK5 integration + chart update on every pixel of movement)
+                debouncedRunSimulation();
             });
         });
 
@@ -1151,7 +1153,14 @@
             if (!isNaN(f('pm-heading'))) manualHeading = f('pm-heading');
             if (!isNaN(f('pm-lat')))     manualLat     = f('pm-lat');
             if (!isNaN(f('pm-lon')))     manualLon     = f('pm-lon');
-            if (!isNaN(f('pm-maxtime'))) manualMaxTime = Math.max(100, f('pm-maxtime'));
+            if (!isNaN(f('pm-maxtime'))) {
+                const requestedMaxTime = f('pm-maxtime');
+                const MAX_SIM_TIME_CEILING = 5000; // seconds; ~2x the Apollo 10 reference duration
+                manualMaxTime = Math.min(MAX_SIM_TIME_CEILING, Math.max(100, requestedMaxTime));
+                if (requestedMaxTime > MAX_SIM_TIME_CEILING) {
+                    alert(`Max Sim Time capped at ${MAX_SIM_TIME_CEILING}s (entered value was too large and could freeze the browser).`);
+                }
+            }
 
             closeParamsModal();
             runSimulation();
@@ -2185,19 +2194,16 @@
             const heatConstraintVal  = parseFloat(document.getElementById('heat-constraint').value)  || null;
 
             // Altitude Chart
-            if (charts.altitude) charts.altitude.destroy();
-            
             const altitudeAnnotations = {};
             if (verticalLineAnnotation) altitudeAnnotations.verticalLine = verticalLineAnnotation;
             if (horizontalLineAnnotation) altitudeAnnotations.horizontalLine = horizontalLineAnnotation;
             
             // Bank Angle Chart
-            if (charts.bankAngle) charts.bankAngle.destroy();
             const bankAngleDataPoints = time.map((t, i) => ({ x: t, y: bankAngle[i] }));
             const bankHandleData = (currentBankMode === 'visual' && visualProfile.length > 0)
                 ? visualProfile.map(p => ({ x: p.time, y: p.angle }))
                 : [];
-            charts.bankAngle = new Chart(document.getElementById('bankAngleChart'), {
+            const bankAngleConfig = {
                 type: 'line',
                 data: {
                     datasets: [
@@ -2228,6 +2234,7 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: true,
+                    animation: false,
                     layout: { ...sharedLayout },
                     plugins: {
                         legend: { display: false },
@@ -2256,7 +2263,14 @@
                         }
                     }
                 }
-            });
+            };
+            if (charts.bankAngle) {
+                charts.bankAngle.data = bankAngleConfig.data;
+                charts.bankAngle.options = bankAngleConfig.options;
+                charts.bankAngle.update('none');
+            } else {
+                charts.bankAngle = new Chart(document.getElementById('bankAngleChart'), bankAngleConfig);
+            }
 
             // Convert to x-y data points
             const altitudeData = time.map((t, i) => ({ x: t, y: altitude[i] }));
@@ -2290,7 +2304,7 @@
             }
 
             altitudeDatasets.push(makeDotDataset());
-            charts.altitude = new Chart(document.getElementById('altitudeChart'), {
+            const altitudeConfig = {
                 type: 'line',
                 data: {
                     datasets: altitudeDatasets
@@ -2298,6 +2312,7 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: true,
+                    animation: false,
                     layout: { ...sharedLayout },
                     plugins: {
                         legend: {
@@ -2324,11 +2339,16 @@
                         }
                     }
                 }
-            });
+            };
+            if (charts.altitude) {
+                charts.altitude.data = altitudeConfig.data;
+                charts.altitude.options = altitudeConfig.options;
+                charts.altitude.update('none');
+            } else {
+                charts.altitude = new Chart(document.getElementById('altitudeChart'), altitudeConfig);
+            }
 
             // Velocity Chart
-            if (charts.velocity) charts.velocity.destroy();
-            
             const velocityAnnotations = {};
             if (verticalLineAnnotation) velocityAnnotations.verticalLine = verticalLineAnnotation;
 
@@ -2364,7 +2384,7 @@
             }
 
             velocityDatasets.push(makeDotDataset());
-            charts.velocity = new Chart(document.getElementById('velocityChart'), {
+            const velocityConfig = {
                 type: 'line',
                 data: {
                     datasets: velocityDatasets
@@ -2372,6 +2392,7 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: true,
+                    animation: false,
                     layout: { ...sharedLayout },
                     plugins: {
                         legend: {
@@ -2398,11 +2419,16 @@
                         }
                     }
                 }
-            });
+            };
+            if (charts.velocity) {
+                charts.velocity.data = velocityConfig.data;
+                charts.velocity.options = velocityConfig.options;
+                charts.velocity.update('none');
+            } else {
+                charts.velocity = new Chart(document.getElementById('velocityChart'), velocityConfig);
+            }
 
             // Deceleration Chart
-            if (charts.decel) charts.decel.destroy();
-            
             const decelAnnotations = {};
             if (verticalLineAnnotation) decelAnnotations.verticalLine = verticalLineAnnotation;
             if (decelConstraintVal) {
@@ -2420,7 +2446,7 @@
             // Convert to x-y data points
             const decelData = time.map((t, i) => ({ x: t, y: deceleration[i] }));
             
-            charts.decel = new Chart(document.getElementById('decelChart'), {
+            const decelConfig = {
                 type: 'line',
                 data: {
                     datasets: [{
@@ -2436,6 +2462,7 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: true,
+                    animation: false,
                     layout: { ...sharedLayout },
                     plugins: {
                         legend: { display: false },
@@ -2456,11 +2483,16 @@
                         }
                     }
                 }
-            });
+            };
+            if (charts.decel) {
+                charts.decel.data = decelConfig.data;
+                charts.decel.options = decelConfig.options;
+                charts.decel.update('none');
+            } else {
+                charts.decel = new Chart(document.getElementById('decelChart'), decelConfig);
+            }
 
             // Heat Flux Chart
-            if (charts.heat) charts.heat.destroy();
-            
             const heatAnnotations = {};
             if (verticalLineAnnotation) heatAnnotations.verticalLine = verticalLineAnnotation;
             if (heatConstraintVal) {
@@ -2478,7 +2510,7 @@
             // Convert to x-y data points
             const heatFluxDataPoints = time.map((t, i) => ({ x: t, y: heatFlux[i] / 1000 })); // Convert to kW/m²
             
-            charts.heat = new Chart(document.getElementById('heatChart'), {
+            const heatConfig = {
                 type: 'line',
                 data: {
                     datasets: [{
@@ -2494,6 +2526,7 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: true,
+                    animation: false,
                     layout: { ...sharedLayout },
                     plugins: {
                         legend: { display: false },
@@ -2520,17 +2553,22 @@
                         }
                     }
                 }
-            });
+            };
+            if (charts.heat) {
+                charts.heat.data = heatConfig.data;
+                charts.heat.options = heatConfig.options;
+                charts.heat.update('none');
+            } else {
+                charts.heat = new Chart(document.getElementById('heatChart'), heatConfig);
+            }
             
             // Flight Path Angle Chart
-            if (charts.fpa) charts.fpa.destroy();
-            
             const fpaAnnotations = {};
             if (verticalLineAnnotation) fpaAnnotations.verticalLine = verticalLineAnnotation;
-            
+
             const fpaDataPoints = time.map((t, i) => ({ x: t, y: fpa[i] }));
-            
-            charts.fpa = new Chart(document.getElementById('fpaChart'), {
+
+            const fpaConfig = {
                 type: 'line',
                 data: {
                     datasets: [{
@@ -2546,6 +2584,7 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: true,
+                    animation: false,
                     layout: { ...sharedLayout },
                     plugins: {
                         legend: { display: false },
@@ -2566,14 +2605,19 @@
                         }
                     }
                 }
-            });
+            };
+            if (charts.fpa) {
+                charts.fpa.data = fpaConfig.data;
+                charts.fpa.options = fpaConfig.options;
+                charts.fpa.update('none');
+            } else {
+                charts.fpa = new Chart(document.getElementById('fpaChart'), fpaConfig);
+            }
             
             // Altitude vs Downrange Chart
-            if (charts.downrange) charts.downrange.destroy();
-            
             const downrangeDataPoints = downrange.map((dr, i) => ({ x: dr, y: altitude[i] }));
-            
-            charts.downrange = new Chart(document.getElementById('downrangeChart'), {
+
+            const downrangeConfig = {
                 type: 'line',
                 data: {
                     datasets: [{
@@ -2589,6 +2633,7 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: true,
+                    animation: false,
                     layout: { ...sharedLayout },
                     plugins: {
                         legend: { display: false }
@@ -2616,14 +2661,19 @@
                         }
                     }
                 }
-            });
+            };
+            if (charts.downrange) {
+                charts.downrange.data = downrangeConfig.data;
+                charts.downrange.options = downrangeConfig.options;
+                charts.downrange.update('none');
+            } else {
+                charts.downrange = new Chart(document.getElementById('downrangeChart'), downrangeConfig);
+            }
             
             // Altitude vs Crossrange Chart
-            if (charts.crossrange) charts.crossrange.destroy();
-            
             const crossrangeDataPoints = crossrange.map((cr, i) => ({ x: cr, y: altitude[i] }));
-            
-            charts.crossrange = new Chart(document.getElementById('crossrangeChart'), {
+
+            const crossrangeConfig = {
                 type: 'line',
                 data: {
                     datasets: [{
@@ -2639,6 +2689,7 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: true,
+                    animation: false,
                     layout: { ...sharedLayout },
                     plugins: {
                         legend: { display: false }
@@ -2666,11 +2717,16 @@
                         }
                     }
                 }
-            });
+            };
+            if (charts.crossrange) {
+                charts.crossrange.data = crossrangeConfig.data;
+                charts.crossrange.options = crossrangeConfig.options;
+                charts.crossrange.update('none');
+            } else {
+                charts.crossrange = new Chart(document.getElementById('crossrangeChart'), crossrangeConfig);
+            }
 
             // Ground Track (Lat/Lon) Chart
-            if (charts.latLon) charts.latLon.destroy();
-
             const latData = charts.latitudeData;
             const lonData = charts.longitudeData;
 
@@ -2740,12 +2796,13 @@
                     ticks: { color: '#9aa0a6', font: { family: 'Roboto Mono', size: 11 } }
                 };
 
-                charts.latLon = new Chart(document.getElementById('latLonChart'), {
+                const latLonConfig = {
                     type: 'scatter',
                     data: { datasets: latLonDatasets },
                     options: {
                         responsive: true,
                         maintainAspectRatio: true,
+                        animation: false,
                         layout: { ...sharedLayout },
                         plugins: {
                             legend: { display: false },
@@ -2772,7 +2829,14 @@
                             }
                         }
                     }
-                });
+                };
+                if (charts.latLon) {
+                    charts.latLon.data = latLonConfig.data;
+                    charts.latLon.options = latLonConfig.options;
+                    charts.latLon.update('none');
+                } else {
+                    charts.latLon = new Chart(document.getElementById('latLonChart'), latLonConfig);
+                }
             }
         }
 
@@ -3086,17 +3150,20 @@
 
             // Monkey-patch runSimulation to capture telemetry after completion
             const originalRunSimulation = window.runSimulation;
+            let pendingTelemetryTimer = null;
             window.runSimulation = function(...args) {
                 /* === FIX: VIS TRAJECTORY STREAMING === */
                 console.log('[VIS-BRIDGE] runSimulation() intercepted, calling original...');
                 /* === END FIX === */
-                
+
                 // Call original simulation (UNMODIFIED)
                 const result = originalRunSimulation.apply(this, args);
-                
+
                 /* === FIX: VIS TRAJECTORY STREAMING === */
                 // AFTER simulation completes, build and send telemetry (READ ONLY)
-                setTimeout(() => {
+                // Coalesce bursts of rapid calls (e.g. slider drags) into a single send
+                clearTimeout(pendingTelemetryTimer);
+                pendingTelemetryTimer = setTimeout(() => {
                     console.log('[VIS-BRIDGE] Post-simulation: building telemetry...');
                     buildTelemetry();
                     if (vizWindow && !vizWindow.closed && vizReady) {
@@ -3107,7 +3174,7 @@
                     }
                 }, 100);
                 /* === END FIX === */
-                
+
                 return result;
             };
             
